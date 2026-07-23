@@ -1,0 +1,13 @@
+# Python cache — compiled bytecode, auto-generated, never commit
+__pycache__/
+*.py[cod]
+
+# Model weights — too large for GitHub (can be GBs), stored separately
+radiology/model/
+
+# Logs — runtime output, not source code
+radiology/logs/
+
+# Editor / OS noise
+.DS_Store
+*.swp
