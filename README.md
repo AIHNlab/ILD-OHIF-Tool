@@ -4,14 +4,14 @@ A [MONAI Label](https://github.com/Project-MONAI/MONAILabel) server providing AI
 
 ## What it does
 
-Radiologists open a CT scan in OHIF, click a button, and get an AI-generated segmentation overlay — either fully automatic (nnU-Net) or interactive with click/box prompts (DeepEdit, DeepGrow are the defaults but we need to integrate MedSAM2). Labels can be reviewed, corrected, and saved back to Orthanc.
+Radiologists open a CT scan in OHIF and get an AI-generated segmentation overlay — either fully automatic (nnU-Net, SegResNet) or interactive with click/box prompts (DeepEdit, DeepGrow, and MedSAM2 — in progress). Labels can be reviewed, corrected, and saved back to Orthanc.
 
 Two apps are included:
 
-| App | Models | Interaction |
-|---|---|---|
-| `radiology` | nnU-Net Lung, nnU-Net ILD (8-class), DeepEdit, DeepGrow, SegResNet | Automatic + interactive clicks |
-| `monaibundle` | Any MONAI Model Zoo bundle (e.g. wholeBody_ct_segmentation) | Automatic |
+| App | Purpose |
+|---|---|
+| `radiology` | Custom nnU-Net models + MONAI interactive models |
+| `monaibundle` | Any bundle from the MONAI Model Zoo |
 
 ---
 
@@ -25,13 +25,14 @@ Orthanc  ◄──────────────────────�
     │  DICOMweb                                      │ stores segmentation
     ▼                                                │
 MONAI Label server  (FastAPI + Uvicorn, port 8000)  │
-    ├── radiology app                                │
-    │       ├── nnU-Net Lung                         │
-    │       ├── nnU-Net ILD (8 classes)              │
-    │       ├── DeepEdit / DeepGrow                  │
-    │       └── GraphCut scribbles                   │
-    └── monaibundle app
-            └── MONAI Zoo bundles
+    └── radiology app                                │
+            ├── nnU-Net Lung          (custom)       │
+            ├── nnU-Net ILD 8-class   (custom)       │
+            ├── DeepEdit / DeepGrow   (pretrained)   │
+            ├── SegResNet multi-organ (pretrained)   │
+            ├── Spleen UNet           (pretrained)   │
+            ├── Vertebra pipeline     (pretrained)   │
+            └── GraphCut scribbles    (no GPU)       │
 ```
 
 ---
@@ -51,7 +52,7 @@ All dependencies run inside the `monai081` conda environment:
 conda activate monai081
 ```
 
-Key packages (already installed in `monai081`):
+Key packages already installed in `monai081`:
 
 | Package | Version | Role |
 |---|---|---|
@@ -68,50 +69,59 @@ Key packages (already installed in `monai081`):
 
 ```
 apps081/
-├── radiology/              # Main app (nnU-Net + interactive models)
-│   ├── main.py             # App entry point — registers all models
+├── radiology/                   # Main app
+│   ├── main.py                  # Entry point — auto-discovers all models in lib/configs/
 │   ├── lib/
-│   │   ├── configs/        # One file per model: labels, paths, network config
+│   │   ├── configs/             # One file per model: labels, weight paths, network config
 │   │   │   ├── nnunet_lung.py
 │   │   │   ├── nnunet_ild.py
 │   │   │   ├── deepedit.py
-│   │   │   └── ...
-│   │   ├── infers/         # Inference logic for each model
-│   │   │   ├── nnunet.py   # Custom nnU-Net wrapper (bypasses MONAI pipeline)
-│   │   │   ├── deepedit.py
-│   │   │   ├── deepgrow.py
-│   │   │   └── ...
-│   │   ├── trainers/       # Active learning fine-tuning (MONAI-native models)
-│   │   └── transforms/     # Custom MONAI transforms (centroid extraction, etc.)
-│   └── model/              # Model weights — NOT in git, stored separately
+│   │   │   ├── deepgrow_2d.py
+│   │   │   ├── deepgrow_3d.py
+│   │   │   ├── segmentation.py
+│   │   │   ├── segmentation_spleen.py
+│   │   │   ├── localization_spine.py
+│   │   │   ├── localization_vertebra.py
+│   │   │   └── segmentation_vertebra.py
+│   │   ├── infers/              # Inference logic
+│   │   │   ├── nnunet.py        # Custom nnU-Net wrapper
+│   │   │   └── ...              # MONAI-based inferers for all other models
+│   │   ├── trainers/            # Active learning fine-tuning (MONAI-native models)
+│   │   └── transforms/          # Custom MONAI transforms (centroid extraction, etc.)
+│   └── model/                   # Model weights — NOT in git, stored separately
 │       ├── nnUNet_results/
 │       │   ├── Dataset001_Lung/
+│       │   ├── Dataset002_ILD/   # exists on disk but not wired to a config yet
 │       │   └── Dataset003_ILD_raw/
 │       └── pretrained_*.pt
 │
-└── monaibundle/            # Bundle app (MONAI Model Zoo)
+└── monaibundle/                 # MONAI Model Zoo bundle app
     └── main.py
 ```
 
-> **Model weights are excluded from git** (too large). See [Model weights](#model-weights) below.
+> **Model weights are excluded from git** (too large for GitHub). See [Model weights](#model-weights) below.
 
 ---
 
 ## Running the server
 
-Activate the environment and start the server from inside the `apps081/` folder.
-
-### Radiology app — nnU-Net Lung segmentation
+Activate the environment first, then run from inside `apps081/`:
 
 ```bash
 conda activate monai081
+cd apps081
+```
+
+### nnU-Net Lung segmentation
+
+```bash
 monailabel start_server \
     --app radiology \
     --studies <ORTHANC_DICOMWEB_URL_OR_LOCAL_FOLDER> \
     --conf models nnunet_lung
 ```
 
-### Radiology app — nnU-Net ILD segmentation (8 classes)
+### nnU-Net ILD segmentation (8 classes)
 
 ```bash
 monailabel start_server \
@@ -120,7 +130,7 @@ monailabel start_server \
     --conf models nnunet_ild
 ```
 
-### Radiology app — multiple models at once
+### Multiple models at once
 
 ```bash
 monailabel start_server \
@@ -129,7 +139,7 @@ monailabel start_server \
     --conf models "nnunet_lung,nnunet_ild,deepedit"
 ```
 
-### MONAI bundle app — whole-body segmentation
+### MONAI bundle app
 
 ```bash
 monailabel start_server \
@@ -138,51 +148,75 @@ monailabel start_server \
     --conf models wholeBody_ct_segmentation
 ```
 
-**`--studies`** can be either:
-- A local folder of NIfTI/NRRD files: `--studies /path/to/images`
+**`--studies`** can be:
+- A local folder: `--studies /path/to/images`
 - An Orthanc DICOMweb URL: `--studies http://localhost:8042/dicom-web`
 
-The server starts on **port 8000** by default. The OHIF MONAI Label plugin should be configured to point at `http://<server>:8000`.
+The server starts on **port 8000** by default.
 
 ---
 
 ## Available models
 
-### nnU-Net Lung (`nnunet_lung`)
+### `nnunet_lung` — Lung segmentation (custom trained)
 
-- **Task**: Binary lung segmentation
-- **Label**: `lung` (1)
-- **Type**: Fully automatic — no user interaction required
+- **Type**: Fully automatic
+- **Labels**: `lung` (1)
 - **Weights**: `radiology/model/nnUNet_results/Dataset001_Lung/nnUNetTrainer__nnUNetPlans__3d_fullres/`
 
-### nnU-Net ILD (`nnunet_ild`)
+### `nnunet_ild` — ILD pattern segmentation (custom trained)
 
-- **Task**: Multi-class ILD pattern segmentation
-- **Labels**: `healthy` (1), `ggo` (2), `reticulation` (3), `consolidation` (4), `honeycombing` (5), `reticulation_ggo` (6), `bronchiectasis` (7), `emphysema` (8)
 - **Type**: Fully automatic
+- **Labels**: `healthy` (1), `ggo` (2), `reticulation` (3), `consolidation` (4), `honeycombing` (5), `reticulation_ggo` (6), `bronchiectasis` (7), `emphysema` (8)
 - **Weights**: `radiology/model/nnUNet_results/Dataset003_ILD_raw/nnUNetTrainer__nnUNetPlans__3d_fullres/`
 
-### DeepEdit (`deepedit`)
+> Note: `Dataset002_ILD/` also exists in the model folder but is not currently wired to a config. To use it, duplicate `nnunet_ild.py` and update the `model_folder` path.
 
-- **Task**: Interactive multi-organ segmentation
-- **Type**: Interactive — user provides foreground/background clicks in OHIF which guide the model. Can also run fully automatic.
-- **Weights**: `radiology/model/pretrained_deepedit_dynunet.pt`
+### `deepedit` — Interactive multi-organ segmentation (pretrained)
 
-### DeepGrow 2D / 3D (`deepgrow_2d`, `deepgrow_3d`)
+- **Type**: Interactive (foreground/background clicks in OHIF) or fully automatic
+- **Labels**: spleen, liver, kidney, and others
+- **Weights**: `radiology/model/pretrained_deepedit_dynunet.pt` — downloaded automatically on first run
 
-- **Task**: Interactive single-structure segmentation
+### `deepgrow_2d` / `deepgrow_3d` — Interactive single-structure segmentation (pretrained)
+
 - **Type**: Interactive — user clicks on a slice to guide segmentation
-- **Weights**: `radiology/model/pretrained_deepgrow_2d.pt` / `pretrained_deepgrow_3d.pt`
+- **Weights**: `pretrained_deepgrow_2d.pt` / `pretrained_deepgrow_3d.pt` — downloaded automatically on first run
 
-### GraphCut scribbles
+### `segmentation` — Multi-organ segmentation SegResNet (pretrained)
 
-- **`Histogram+GraphCut`** / **`GMM+GraphCut`**: CPU-only, no model weights needed. User draws foreground/background scribbles; graph-cut finds the boundary.
+- **Type**: Fully automatic
+- **Labels**: 24 structures including spleen, kidneys, liver, stomach, aorta, lung lobes, heart chambers
+- **Weights**: Downloaded automatically on first run
+
+### `segmentation_spleen` — Spleen segmentation UNet (pretrained)
+
+- **Type**: Fully automatic
+- **Labels**: `spleen` (1)
+- **Weights**: `radiology/model/pretrained_segmentation_spleen.pt` — downloaded automatically on first run
+
+### Vertebra pipeline — `localization_spine` + `localization_vertebra` + `segmentation_vertebra`
+
+Three-stage pipeline for vertebra segmentation. Must be run together:
+
+```bash
+--conf models "localization_spine,localization_vertebra,segmentation_vertebra"
+```
+
+- **Labels**: C1–C7, Th1–Th12, L1–L5 (24 vertebrae)
+- **Weights**: Downloaded automatically on first run
+
+### GraphCut scribbles — `Histogram+GraphCut` / `GMM+GraphCut`
+
+- **Type**: Interactive scribbles — no neural network, no GPU required
+- User draws foreground/background strokes in OHIF; graph-cut finds the boundary
+- Always available, no weights needed
 
 ---
 
 ## Model weights
 
-Weights are **not stored in this repository**. After cloning, place them in `radiology/model/` following this structure:
+Weights are **not stored in this repository**. After cloning, place custom-trained weights in `radiology/model/` following this structure:
 
 ```
 radiology/model/
@@ -192,30 +226,27 @@ radiology/model/
 │   │       ├── dataset.json
 │   │       ├── plans.json
 │   │       └── fold_0/
-│   │           └── checkpoint_final.pth   (or checkpoint_best.pth)
+│   │           └── checkpoint_final.pth
 │   └── Dataset003_ILD_raw/
 │       └── nnUNetTrainer__nnUNetPlans__3d_fullres/
 │           ├── dataset.json
 │           ├── plans.json
 │           └── fold_0/
 │               └── checkpoint_final.pth
-├── pretrained_deepedit_dynunet.pt
-├── pretrained_deepgrow_2d.pt
-├── pretrained_deepgrow_3d.pt
 └── pretrained_segmentation_spleen.pt
 ```
 
-> **Important for nnU-Net**: the `dataset.json` and `plans.json` files must be present alongside the checkpoint. They can be extracted from the checkpoint itself if missing — see [Reconstructing nnU-Net metadata](#reconstructing-nnunet-metadata).
+Pretrained MONAI models (`deepedit`, `deepgrow`, `segmentation`, `localization_*`) are **downloaded automatically** from the MONAI Model Zoo on first run.
 
 ### Reconstructing nnU-Net metadata from a bare checkpoint
 
-If you only have `checkpoint_best.pth` without the JSON files:
+If you only have `checkpoint_best.pth` without `dataset.json` / `plans.json`:
 
 ```python
 import torch, json, os, shutil
 
 src = "checkpoint_best.pth"
-dst = "."   # folder where dataset.json and plans.json should go
+dst = "."  # folder where the JSON files should go
 
 ck = torch.load(src, map_location="cpu", weights_only=False)
 os.makedirs(os.path.join(dst, "fold_0"), exist_ok=True)
@@ -228,11 +259,13 @@ with open(os.path.join(dst, "dataset.json"), "w") as f:
 shutil.move(src, os.path.join(dst, "fold_0", "checkpoint_best.pth"))
 ```
 
+Then pass `checkpoint="checkpoint_best.pth"` when instantiating `NNUNet` in the config.
+
 ---
 
 ## Adding a new model
 
-1. Create `radiology/lib/configs/my_model.py` — define labels, weight path, and return an `InferTask`:
+1. Create `radiology/lib/configs/my_model.py`:
 
 ```python
 import os
@@ -244,7 +277,7 @@ class MyModel(TaskConfig):
         super().init(name, model_dir, conf, planner, **kwargs)
         self.labels = {"structure": 1}
         self.label_colors = {"structure": [255, 0, 0]}
-        self.model_folder = os.path.join(model_dir, "my_model_folder")
+        self.model_folder = os.path.join(model_dir, "my_model_weights/")
 
     def infer(self) -> dict:
         return {self.name: NNUNet(self.model_folder, labels=self.labels,
@@ -255,22 +288,20 @@ class MyModel(TaskConfig):
         return None
 ```
 
-2. Start the server with `--conf models my_model` — it is auto-discovered by name.
-
-No changes to `main.py` are needed.
+2. Start the server with `--conf models my_model` — it is discovered automatically by filename. No changes to `main.py` needed.
 
 ---
 
 ## Troubleshooting
 
-**Server won't start — "models not found"**
-Make sure the model name passed to `--conf models` exactly matches the lowercase filename in `lib/configs/` (e.g. `nnunet_lung` for `lib/configs/nnunet_lung.py`).
+**"models not found" on startup**
+The name passed to `--conf models` must exactly match the lowercase filename in `lib/configs/` (e.g. `nnunet_lung` for `nnunet_lung.py`).
 
-**nnU-Net inference fails — "dataset.json not found"**
-The model folder is missing `dataset.json` / `plans.json`. See [Reconstructing nnU-Net metadata](#reconstructing-nnunet-metadata).
+**nnU-Net fails — "dataset.json not found"**
+The model folder is missing `dataset.json` / `plans.json`. See [Reconstructing nnU-Net metadata](#reconstructing-nnunet-metadata-from-a-bare-checkpoint).
 
 **OHIF shows no models**
-Check that the MONAI Label plugin in OHIF is pointed at the correct server URL and port (default `http://localhost:8000`).
+Check that the MONAI Label plugin in OHIF is pointed at the correct server URL (default `http://localhost:8000`).
 
-**Out of GPU memory**
-nnU-Net uses `tile_step_size=0.5` and mirroring by default. On low-memory GPUs, edit `lib/infers/nnunet.py` and set `use_mirroring=False`.
+**Out of GPU memory on large CTs**
+Edit `radiology/lib/infers/nnunet.py` and set `use_mirroring=False` in the `nnUNetPredictor` constructor.
