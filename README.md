@@ -4,7 +4,7 @@ A [MONAI Label](https://github.com/Project-MONAI/MONAILabel) server providing AI
 
 ## What it does
 
-Radiologists open a CT scan in OHIF, click a button, and get an AI-generated segmentation overlay — either fully automatic (nnU-Net) or interactive with click/box prompts (DeepEdit, DeepGrow). Labels can be reviewed, corrected, and saved back to Orthanc.
+Radiologists open a CT scan in OHIF, click a button, and get an AI-generated segmentation overlay — either fully automatic (nnU-Net) or interactive with click/box prompts (DeepEdit, DeepGrow are the defaults but we need to integrate MedSAM2). Labels can be reviewed, corrected, and saved back to Orthanc.
 
 Two apps are included:
 
