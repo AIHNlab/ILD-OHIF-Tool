@@ -156,7 +156,6 @@ The server starts on **port 8000** by default.
 
 - **Type**: Interactive — user draws a bounding box on a representative slice; the model propagates the mask through the volume
 - **Trained on**: `Dataset003_ILD_raw` (ILD model) and `Dataset001_Lung` (lung model)
-- **Checkpoints**: `/home/bill/IF/checkpoint_best_val.pt` (ILD) and `/home/bill/LF/checkpoint_best_val.pt` (Lung)
 - Integration into MONAI Label is work in progress
 
 ### MONAI default models
@@ -198,15 +197,27 @@ radiology/model/
 └── pretrained_segmentation_spleen.pt
 ```
 
-### Reconstructing nnU-Net metadata from a bare checkpoint
+### Updating or replacing nnU-Net checkpoints
 
-If you only have `checkpoint_best.pth` without `dataset.json` / `plans.json` (both are embedded inside the checkpoint):
+> This section is only relevant when swapping in new model weights. The checkpoints currently used by the server already have the correct structure and do not need this.
+
+nnU-Net requires a specific folder structure alongside the checkpoint file — it will not load a bare `.pth` file on its own:
+
+```
+model_folder/
+├── dataset.json
+├── plans.json
+└── fold_0/
+    └── checkpoint_best.pth
+```
+
+If you receive a new checkpoint as a single `.pth` file (e.g. from a new training run), both `dataset.json` and `plans.json` are actually embedded inside it and can be extracted with this script:
 
 ```python
 import torch, json, os, shutil
 
-src = "checkpoint_best.pth"
-dst = "."  # folder where JSON files should go
+src = "checkpoint_best.pth"   # path to your new checkpoint
+dst = "."                      # destination folder (will become the new model_folder)
 
 ck = torch.load(src, map_location="cpu", weights_only=False)
 os.makedirs(os.path.join(dst, "fold_0"), exist_ok=True)
@@ -219,7 +230,7 @@ with open(os.path.join(dst, "dataset.json"), "w") as f:
 shutil.move(src, os.path.join(dst, "fold_0", "checkpoint_best.pth"))
 ```
 
-Then pass `checkpoint="checkpoint_best.pth"` when instantiating `NNUNet` in the config file.
+Then update the `model_folder` path in the relevant config file (`nnunet_lung.py` or `nnunet_ild.py`) to point at `dst`, and pass `checkpoint="checkpoint_best.pth"` to the `NNUNet` constructor.
 
 ---
 
@@ -254,11 +265,13 @@ class MyModel(TaskConfig):
 
 ## Troubleshooting
 
+> These are issues you may hit when setting up on a new machine or adding new models — not problems with the currently running setup.
+
 **"models not found" on startup**
 The name in `--conf models` must match the lowercase filename in `lib/configs/` exactly (e.g. `nnunet_lung` for `nnunet_lung.py`).
 
 **nnU-Net fails — "dataset.json not found"**
-The model folder is missing `dataset.json` / `plans.json`. See [Reconstructing nnU-Net metadata](#reconstructing-nnunet-metadata-from-a-bare-checkpoint).
+The model folder is missing `dataset.json` / `plans.json`. This happens when a bare checkpoint file is used without the required folder structure. See [Updating or replacing nnU-Net checkpoints](#updating-or-replacing-nnunet-checkpoints).
 
 **OHIF shows no models**
 Check that the MONAI Label plugin in OHIF points at the correct server URL (default `http://localhost:8000`).
