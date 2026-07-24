@@ -177,25 +177,28 @@ Pretrained weights for these download automatically from the MONAI Model Zoo on 
 
 ## Model weights
 
-Weights are **not stored in this repository**. After cloning, place them in `radiology/model/` with this structure:
+Weights are **not stored in this repository** (too large for GitHub). They are shared separately via OneDrive — ask the repository owner for the link.
+
+After downloading, place the files inside the repo at exactly this path, preserving the folder structure:
 
 ```
-radiology/model/
-├── nnUNet_results/
-│   ├── Dataset001_Lung/
-│   │   └── nnUNetTrainer__nnUNetPlans__3d_fullres/
-│   │       ├── dataset.json
-│   │       ├── plans.json
-│   │       └── fold_0/
-│   │           └── checkpoint_final.pth
-│   └── Dataset003_ILD_raw/
-│       └── nnUNetTrainer__nnUNetPlans__3d_fullres/
-│           ├── dataset.json
-│           ├── plans.json
-│           └── fold_0/
-│               └── checkpoint_final.pth
-└── pretrained_segmentation_spleen.pt
+apps081/radiology/model/nnUNet_results/
+├── Dataset001_Lung/
+│   └── nnUNetTrainer__nnUNetPlans__3d_fullres/
+│       ├── dataset.json
+│       ├── plans.json
+│       └── fold_0/
+│           └── checkpoint_final.pth          ← lung segmentation weights
+│
+└── Dataset003_ILD_raw/
+    └── nnUNetTrainer__nnUNetPlans__3d_fullres/
+        ├── dataset.json
+        ├── plans.json
+        └── fold_0/
+            └── checkpoint_final.pth          ← ILD segmentation weights
 ```
+
+> The `pretrained_*.pt` files for the MONAI default models (deepedit, deepgrow, etc.) are **not** on OneDrive — they download automatically from the MONAI Model Zoo the first time the server starts.
 
 ### Updating or replacing nnU-Net checkpoints
 
