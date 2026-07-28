@@ -11,3 +11,9 @@ radiology/logs/
 # Editor / OS noise
 .DS_Store
 *.swp
+
+.claude/
+.idea/
+
+Annotation_Tool_Test_Data/
+# plugins/ohif/monai-label/node_modules/

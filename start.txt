@@ -1,0 +1,31 @@
+1. Orthanc (DICOM server) — nothing to do
+It's already running automatically as a Windows service. Confirm anytime with:
+
+
+Get-Service -Name Orthanc
+Should show Running / Automatic. If it's ever Stopped, you'd need an elevated PowerShell to start it (Start-Service Orthanc) — but currently it's up.
+
+2. Start the MONAI Label server
+Open a terminal (PowerShell, with the monai081 conda env — or just call the env's python directly like below), cd into the repo, and run:
+
+
+cd C:\Users\GoFOODAppPC\Documents\Github\ILD-OHIF-Tool
+C:\Users\GoFOODAppPC\miniconda3\envs\monai081\python.exe -m monailabel.main start_server --app radiology --studies http://localhost:8042/dicom-web --conf models nnunet_lung,nnunet_ild
+Wait for:
+
+
+Uvicorn running on http://0.0.0.0:8000
+Keep this terminal open — closing it stops the server.
+
+3. Open the viewer
+Browse to http://localhost:8000/ohif/. Your studies (already uploaded to Orthanc) should be listed.
+
+4. If you need to upload a new study
+Go to http://localhost:8042/ui/app/ (or the classic http://localhost:8042/app/explorer.html), click Upload, and drag in .dcm files or a .zip of the study folder. It appears immediately — no restart needed.
+
+To shut down
+Ctrl+C (or close) the MONAI Label terminal.
+Leave Orthanc's service running — it's idle/lightweight when not in use.
+That's the whole loop, currently running the stock OHIF plugin (no ROI feature, per your last request).
+
+

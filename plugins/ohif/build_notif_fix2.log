@@ -1,0 +1,30 @@
+Installing requirements...
+node/yarn is already installed
+Current Dir: /c/Users/GoFOODAppPC/Documents/Github/ILD-OHIF-Tool/plugins/ohif
+My Dir: /c/Users/GoFOODAppPC/Documents/Github/ILD-OHIF-Tool/plugins/ohif
+Installing OHIF at: /c/Users/GoFOODAppPC/miniconda3/envs/monai081/Lib/site-packages/monailabel/endpoints/static/ohif
+Cloning into 'Viewers'...
+Updating files:  32% (1162/3544)Updating files:  33% (1170/3544)Updating files:  34% (1205/3544)Updating files:  35% (1241/3544)Updating files:  36% (1276/3544)Updating files:  37% (1312/3544)Updating files:  38% (1347/3544)Updating files:  39% (1383/3544)Updating files:  40% (1418/3544)Updating files:  41% (1454/3544)Updating files:  42% (1489/3544)Updating files:  43% (1524/3544)Updating files:  44% (1560/3544)Updating files:  45% (1595/3544)Updating files:  46% (1631/3544)Updating files:  47% (1666/3544)Updating files:  48% (1702/3544)Updating files:  49% (1737/3544)Updating files:  50% (1772/3544)Updating files:  50% (1786/3544)Updating files:  51% (1808/3544)Updating files:  52% (1843/3544)Updating files:  53% (1879/3544)Updating files:  54% (1914/3544)Updating files:  55% (1950/3544)Updating files:  56% (1985/3544)Updating files:  57% (2021/3544)Updating files:  58% (2056/3544)Updating files:  59% (2091/3544)Updating files:  60% (2127/3544)Updating files:  61% (2162/3544)Updating files:  62% (2198/3544)Updating files:  63% (2233/3544)Updating files:  64% (2269/3544)Updating files:  65% (2304/3544)Updating files:  66% (2340/3544)Updating files:  66% (2342/3544)Updating files:  67% (2375/3544)Updating files:  68% (2410/3544)Updating files:  69% (2446/3544)Updating files:  70% (2481/3544)Updating files:  71% (2517/3544)Updating files:  72% (2552/3544)Updating files:  73% (2588/3544)Updating files:  74% (2623/3544)Updating files:  75% (2658/3544)Updating files:  76% (2694/3544)Updating files:  77% (2729/3544)Updating files:  78% (2765/3544)Updating files:  79% (2800/3544)Updating files:  80% (2836/3544)Updating files:  81% (2871/3544)Updating files:  82% (2907/3544)Updating files:  83% (2942/3544)Updating files:  84% (2977/3544)Updating files:  85% (3013/3544)Updating files:  86% (3048/3544)Updating files:  87% (3084/3544)Updating files:  88% (3119/3544)Updating files:  89% (3155/3544)Updating files:  90% (3190/3544)Updating files:  90% (3212/3544)Updating files:  91% (3226/3544)Updating files:  92% (3261/3544)Updating files:  93% (3296/3544)Updating files:  94% (3332/3544)Updating files:  95% (3367/3544)Updating files:  96% (3403/3544)Updating files:  97% (3438/3544)Updating files:  98% (3474/3544)Updating files:  99% (3509/3544)Updating files: 100% (3544/3544)Updating files: 100% (3544/3544), done.
+Note: switching to '1178751ecfb3919ec3d26ba04161e0ea83a44e56'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 1178751ecf Merge pull request #3266 from OHIF/fix/dependabot-high-items
+rm: cannot remove 'monai-label': No such file or directory
+C:\Users\GoFOODAppPC\tools\node-v16.20.2-win-x64\node.exe: --openssl-legacy-provider is not allowed in NODE_OPTIONS
+yarn config v1.22.22
+success Set "workspaces-experimental" to "true".
+Done in 0.18s.
