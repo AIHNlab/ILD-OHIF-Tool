@@ -27,6 +27,19 @@ from monailabel.tasks.infer.bundle import BundleInferTask
 from monailabel.tasks.scoring.epistemic_v2 import EpistemicScoring
 from monailabel.tasks.train.bundle import BundleTrainTask
 from monailabel.utils.others.generic import get_bundle_models, strtobool
+from lib.infers.medsam2 import MedSAM2InferTask
+
+MEDSAM2_ILD_CHECKPOINT = "/home/bill/IF/checkpoint_best_val.pt"
+MEDSAM2_LUNG_CHECKPOINT = "/home/bill/LF/checkpoint_best_val.pt"
+
+MEDSAM2_ILD_LABELS = {
+    "background": 0,
+    "ild_foreground": 1,
+}
+MEDSAM2_LUNG_LABELS = {
+    "background": 0,
+    "lung": 1,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +87,32 @@ class MyApp(MONAILabelApp):
                 logger.info(f"+++ Adding Inferer:: {n} => {i}")
                 infers[n] = i
 
-        return infers
-    def infer(self, request, **kwargs):
-        request = dict(request)
-        request["result_dtype"] = "uint8"
-        request["result_compress"] = True
-        return super().infer(request, **kwargs)
+        # MedSAM2 interactive models
+        if os.path.exists(MEDSAM2_ILD_CHECKPOINT):
+            ild_task = MedSAM2InferTask(
+                checkpoint_path=MEDSAM2_ILD_CHECKPOINT,
+                model_name="MedSAM2_ILD",
+                labels=MEDSAM2_ILD_LABELS,
+                description="MedSAM2 interactive ILD segmentation — click foreground points on a slice",
+            )
+            infers["MedSAM2_ILD"] = ild_task
+            logger.info("+++ Adding Inferer:: MedSAM2_ILD (interactive)")
 
+        if os.path.exists(MEDSAM2_LUNG_CHECKPOINT):
+            lung_task = MedSAM2InferTask(
+                checkpoint_path=MEDSAM2_LUNG_CHECKPOINT,
+                model_name="MedSAM2_Lung",
+                labels=MEDSAM2_LUNG_LABELS,
+                description="MedSAM2 interactive lung segmentation — click foreground points on a slice",
+            )
+            infers["MedSAM2_Lung"] = lung_task
+            logger.info("+++ Adding Inferer:: MedSAM2_Lung (interactive)")
+
+        return infers
+        def infer(self, request, **kwargs):
+            request["result_dtype"] = "uint8"
+            request["result_compress"] = True
+            return super().infer(request, **kwargs)
 
     def init_trainers(self) -> Dict[str, TrainTask]:
         trainers: Dict[str, TrainTask] = {}
