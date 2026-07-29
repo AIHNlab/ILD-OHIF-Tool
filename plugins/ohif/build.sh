@@ -29,13 +29,23 @@ git clone https://github.com/OHIF/Viewers.git
 cd Viewers
 git checkout 1178751ecfb3919ec3d26ba04161e0ea83a44e56
 
+# Apply our patches on top of upstream OHIF core files (adds the
+# "Instances" / slice-count column to the Study List, among other fixes).
+# These files aren't part of our extension, so they get overwritten by
+# every fresh clone above -- copy our patched versions back in each time.
+cp -r "$my_dir/patches/." .
+
 # Viewers/platform/viewer/public/config/default.js
 #git checkout -- ./platform/viewer/public/config/default.js
+# Single editable knob for pointing the deployed app at a remote MONAI Label
+# backend: this file is copied as-is into the built output (never bundled by
+# webpack), so changing MONAI_LABEL_BACKEND later never requires a rebuild.
+sed -i "1i var MONAI_LABEL_BACKEND = window.MONAI_LABEL_BACKEND || 'localhost:8000';" ./platform/viewer/public/config/default.js
 sed -i "s|routerBasename: '/'|routerBasename: '/ohif/'|g" ./platform/viewer/public/config/default.js
 sed -i "s|name: 'DCM4CHEE'|name: 'Orthanc'|g" ./platform/viewer/public/config/default.js
-sed -i "s|wadoUriRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/wado'|wadoUriRoot: '/proxy/dicom/wado'|g" ./platform/viewer/public/config/default.js
-sed -i "s|wadoRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/rs'|wadoRoot: '/proxy/dicom/wado'|g" ./platform/viewer/public/config/default.js
-sed -i "s|qidoRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/rs'|qidoRoot: '/proxy/dicom/qido'|g" ./platform/viewer/public/config/default.js
+sed -i "s|wadoUriRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/wado'|wadoUriRoot: 'http://' + MONAI_LABEL_BACKEND + '/proxy/dicom/wado'|g" ./platform/viewer/public/config/default.js
+sed -i "s|wadoRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/rs'|wadoRoot: 'http://' + MONAI_LABEL_BACKEND + '/proxy/dicom/wado'|g" ./platform/viewer/public/config/default.js
+sed -i "s|qidoRoot: 'https://server.dcmjs.org/dcm4chee-arc/aets/DCM4CHEE/rs'|qidoRoot: 'http://' + MONAI_LABEL_BACKEND + '/proxy/dicom/qido'|g" ./platform/viewer/public/config/default.js
 
 # Viewers/platform/viewer/.env
 #git checkout -- ./platform/viewer/.env
