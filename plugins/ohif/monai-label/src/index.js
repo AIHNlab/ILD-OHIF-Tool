@@ -13,6 +13,7 @@ limitations under the License.
 
 import toolbarModule from './toolbarModule';
 import panelModule from './panelModule.js';
+import commandsModule from './commandsModule';
 import init from './init';
 import { DeepgrowProbeTool } from './tools/DeepgrowProbeTool';
 
@@ -29,5 +30,8 @@ export default {
   },
   getPanelModule({ servicesManager, commandsManager }) {
     return panelModule({ servicesManager, commandsManager });
+  },
+  getCommandsModule({ servicesManager }) {
+    return commandsModule({ servicesManager });
   },
 };

@@ -11,6 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import AnnotationToolsController from './annotationTools/AnnotationToolsController';
+
 const commandsModule = ({ servicesManager }) => {
   const { UINotificationService } = servicesManager.services;
 
@@ -34,6 +36,15 @@ const commandsModule = ({ servicesManager }) => {
     deepgrow: ({ model_name }) => {
       MONAILabelMessage('Running deepgrow API with ' + model_name);
     },
+    annotationSetTool: ({ viewports, toolName }) => {
+      AnnotationToolsController.setActiveTool(toolName, viewports);
+    },
+    annotationUndo: () => {
+      AnnotationToolsController.undo();
+    },
+    annotationRedo: () => {
+      AnnotationToolsController.redo();
+    },
   };
 
   const definitions = {
@@ -45,6 +56,19 @@ const commandsModule = ({ servicesManager }) => {
     deepgrow: {
       commandFn: actions.deepgrow,
       storeContexts: ['viewports'],
+      options: {},
+    },
+    annotationSetTool: {
+      commandFn: actions.annotationSetTool,
+      storeContexts: ['viewports'],
+      options: {},
+    },
+    annotationUndo: {
+      commandFn: actions.annotationUndo,
+      options: {},
+    },
+    annotationRedo: {
+      commandFn: actions.annotationRedo,
       options: {},
     },
   };

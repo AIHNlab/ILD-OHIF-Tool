@@ -85,6 +85,16 @@ rm -rf ${install_dir}
 mv ./Viewers/platform/viewer/dist ${install_dir}
 echo "Copied OHIF to ${install_dir}"
 
+# On Windows, a running MONAI Label server can hold a lock on install_dir,
+# so the rm -rf above can empty it but fail to remove the directory itself --
+# the mv above then nests the fresh build under an extra install_dir/dist/.
+# Flatten it back out if that happened.
+if [ -d "${install_dir}/dist" ]; then
+  echo "Detected nested dist/ (install_dir was locked, not fully removable) - flattening..."
+  cp -r "${install_dir}/dist/." "${install_dir}/"
+  rm -rf "${install_dir}/dist"
+fi
+
 rm -rf Viewers
 #git restore Viewers
 

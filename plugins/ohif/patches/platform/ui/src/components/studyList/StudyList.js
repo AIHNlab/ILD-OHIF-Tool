@@ -37,10 +37,19 @@ function StudyList(props) {
     onSelectItem: handleSelectItem,
     studyListDateFilterNumDays,
     displaySize,
+    selectedStudyUIDs,
+    onToggleSelectStudy: handleToggleSelectStudy,
+    isAllSelected,
+    onToggleSelectAll: handleToggleSelectAll,
   } = props;
   const { t, ready: translationsAreReady } = useTranslation('StudyList');
 
   const largeTableMeta = [
+    {
+      displayText: '',
+      fieldName: 'select',
+      size: 40,
+    },
     {
       displayText: t('PatientName'),
       fieldName: 'PatientName',
@@ -85,6 +94,11 @@ function StudyList(props) {
   ];
 
   const mediumTableMeta = [
+    {
+      displayText: '',
+      fieldName: 'select',
+      size: 40,
+    },
     {
       displayText: `${t('PatientName')} / ${t('MRN')}`,
       fieldName: 'patientNameOrId',
@@ -149,6 +163,8 @@ function StudyList(props) {
             sortFieldName={sort.fieldName}
             sortDirection={sort.direction}
             studyListDateFilterNumDays={studyListDateFilterNumDays}
+            isAllSelected={isAllSelected}
+            onToggleSelectAll={handleToggleSelectAll}
           />
         </tr>
       </thead>
@@ -190,6 +206,12 @@ function StudyList(props) {
             <TableRow
               key={`${study.StudyInstanceUID}-${index}`}
               onClick={StudyInstanceUID => handleSelectItem(StudyInstanceUID)}
+              isSelected={
+                !!selectedStudyUIDs && selectedStudyUIDs.has(study.StudyInstanceUID)
+              }
+              onToggleSelect={() =>
+                handleToggleSelectStudy(study.StudyInstanceUID)
+              }
               AccessionNumber={study.AccessionNumber || ''}
               modalities={study.modalities}
               numberOfStudyRelatedInstances={
@@ -236,6 +258,10 @@ StudyList.propTypes = {
   onFilterChange: PropTypes.func.isRequired,
   studyListDateFilterNumDays: PropTypes.number,
   displaySize: PropTypes.string,
+  selectedStudyUIDs: PropTypes.any,
+  onToggleSelectStudy: PropTypes.func,
+  isAllSelected: PropTypes.bool,
+  onToggleSelectAll: PropTypes.func,
 };
 
 StudyList.defaultProps = {};
@@ -244,6 +270,8 @@ function TableRow(props) {
   const {
     AccessionNumber,
     isHighlighted,
+    isSelected,
+    onToggleSelect,
     modalities,
     numberOfStudyRelatedInstances,
     PatientID,
@@ -257,11 +285,18 @@ function TableRow(props) {
 
   const { t } = useTranslation('StudyList');
 
+  const selectCell = (
+    <td onClick={evt => evt.stopPropagation()} style={{ textAlign: 'center' }}>
+      <input type="checkbox" checked={isSelected} onChange={onToggleSelect} />
+    </td>
+  );
+
   const largeRowTemplate = (
     <tr
       onClick={() => handleClick(StudyInstanceUID)}
       className={classNames({ active: isHighlighted })}
     >
+      {selectCell}
       <td className={classNames({ 'empty-value': !PatientName })}>
         {PatientName || `(${t('Empty')})`}
       </td>
@@ -289,6 +324,7 @@ function TableRow(props) {
       onClick={() => handleClick(StudyInstanceUID)}
       className={classNames({ active: isHighlighted })}
     >
+      {selectCell}
       <td className={classNames({ 'empty-value': !PatientName })}>
         {PatientName || `(${t('Empty')})`}
         <div style={{ color: '#60656f' }}>{PatientID}</div>
@@ -360,6 +396,18 @@ function TableRow(props) {
     >
       <td style={{ position: 'relative', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          {/* SELECT */}
+          <div
+            onClick={evt => evt.stopPropagation()}
+            style={{ display: 'flex', alignItems: 'center', paddingRight: '8px' }}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+            />
+          </div>
+
           {/* NAME AND ID */}
           <div
             className={classNames({ 'empty-value': !PatientName })}
@@ -432,6 +480,8 @@ function TableRow(props) {
 TableRow.propTypes = {
   AccessionNumber: PropTypes.string.isRequired,
   isHighlighted: PropTypes.bool,
+  isSelected: PropTypes.bool,
+  onToggleSelect: PropTypes.func,
   modalities: PropTypes.string,
   numberOfStudyRelatedInstances: PropTypes.string,
   PatientID: PropTypes.string.isRequired,
@@ -444,6 +494,7 @@ TableRow.propTypes = {
 
 TableRow.defaultProps = {
   isHighlighted: false,
+  isSelected: false,
 };
 
 export { StudyList };

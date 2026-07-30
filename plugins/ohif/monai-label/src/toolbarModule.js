@@ -105,6 +105,67 @@ const definitions = [
       },
     ],
   },
+  {
+    id: 'AnnotationTools',
+    label: 'Annotation Tools',
+    icon: 'edit',
+    buttons: [
+      {
+        id: 'AnnotationPointsFreehand',
+        label: 'Points / Freehand',
+        icon: 'inline-edit',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'annotationSetTool',
+        commandOptions: { toolName: 'FreehandRoi' },
+      },
+      {
+        id: 'AnnotationRectangle',
+        label: 'Rectangle',
+        icon: 'stop',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'annotationSetTool',
+        commandOptions: { toolName: 'RectangleRoi' },
+      },
+      {
+        id: 'AnnotationCircle',
+        label: 'Circle',
+        icon: 'circle',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'annotationSetTool',
+        commandOptions: { toolName: 'CircleRoi' },
+      },
+      {
+        id: 'AnnotationBrush',
+        label: 'Brush',
+        icon: 'brush',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'annotationSetTool',
+        commandOptions: { toolName: 'Brush' },
+      },
+      {
+        id: 'AnnotationDelete',
+        label: 'Delete (click a region)',
+        icon: 'trash',
+        type: TOOLBAR_BUTTON_TYPES.SET_TOOL_ACTIVE,
+        commandName: 'annotationSetTool',
+        commandOptions: { toolName: 'Delete' },
+      },
+      {
+        id: 'AnnotationUndo',
+        label: 'Undo (Ctrl+Z)',
+        icon: 'undo',
+        type: TOOLBAR_BUTTON_TYPES.COMMAND,
+        commandName: 'annotationUndo',
+      },
+      {
+        id: 'AnnotationRedo',
+        label: 'Redo (Ctrl+Y)',
+        icon: 'redo',
+        type: TOOLBAR_BUTTON_TYPES.COMMAND,
+        commandName: 'annotationRedo',
+      },
+    ],
+  },
 ];
 
 export default {

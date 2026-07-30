@@ -13,6 +13,7 @@ limitations under the License.
 
 import { DeepgrowProbeTool } from './index';
 import csTools from 'cornerstone-tools';
+import AnnotationToolsController from './annotationTools/AnnotationToolsController';
 
 /**
  *
@@ -27,6 +28,9 @@ export default function init({ servicesManager, configuration }) {
     CircleScissorsTool,
     FreehandScissorsTool,
     RectangleScissorsTool,
+    FreehandRoiTool,
+    RectangleRoiTool,
+    CircleRoiTool,
   } = csTools;
 
   const tools = [
@@ -37,6 +41,9 @@ export default function init({ servicesManager, configuration }) {
     CircleScissorsTool,
     FreehandScissorsTool,
     RectangleScissorsTool,
+    FreehandRoiTool,
+    RectangleRoiTool,
+    CircleRoiTool,
   ];
 
   tools.forEach(tool => csTools.addTool(tool));
@@ -59,4 +66,6 @@ export default function init({ servicesManager, configuration }) {
     name: 'RectangleScissorsEraser',
     defaultStrategy: 'ERASE_INSIDE',
   });
+
+  AnnotationToolsController.initialize();
 }

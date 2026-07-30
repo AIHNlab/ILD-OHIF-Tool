@@ -55,6 +55,9 @@ function StudyListRoute(props) {
   const [activeModalId, setActiveModalId] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [pageNumber, setPageNumber] = useState(0);
+  // Selection persists across pages/filters on purpose, so studies picked
+  // before paging/filtering stay selected for the eventual "View Selected".
+  const [selectedUIDs, setSelectedUIDs] = useState(() => new Set());
   const appContext = useContext(AppContext);
   // ~~ RESPONSIVE
   const displaySize = useMedia(
@@ -200,6 +203,51 @@ function StudyListRoute(props) {
     });
   }
 
+  function handleToggleSelectStudy(studyInstanceUID) {
+    setSelectedUIDs(prev => {
+      const next = new Set(prev);
+      if (next.has(studyInstanceUID)) {
+        next.delete(studyInstanceUID);
+      } else {
+        next.add(studyInstanceUID);
+      }
+      return next;
+    });
+  }
+
+  function handleViewSelected() {
+    if (!selectedUIDs.size) {
+      return;
+    }
+
+    const viewerPath = RoutesUtil.parseViewerPath(appConfig, server, {
+      studyInstanceUIDs: Array.from(selectedUIDs).join(';'),
+    });
+    history.push(viewerPath);
+  }
+
+  // Select-all only ever applies to the current page's rows - selections on
+  // other pages are untouched, matching how the checkbox column looks (it
+  // only reflects the rows actually visible right now).
+  const isAllOnPageSelected =
+    studies.length > 0 && studies.every(s => selectedUIDs.has(s.StudyInstanceUID));
+
+  function handleToggleSelectAll() {
+    setSelectedUIDs(prev => {
+      const next = new Set(prev);
+      if (isAllOnPageSelected) {
+        studies.forEach(s => next.delete(s.StudyInstanceUID));
+      } else {
+        studies.forEach(s => next.add(s.StudyInstanceUID));
+      }
+      return next;
+    });
+  }
+
+  function handleClearSelection() {
+    setSelectedUIDs(new Set());
+  }
+
   return (
     <>
       {studyListFunctionsEnabled ? (
@@ -232,14 +280,49 @@ function StudyListRoute(props) {
             {t('StudyList')}
           </h1>
         </div>
-        <div className="actions">
+        <div className="actions" style={{ display: 'flex', alignItems: 'center' }}>
           {studyListFunctionsEnabled && healthCareApiButtons}
           {studyListFunctionsEnabled && (
             <PageToolbar
               onImport={() => setActiveModalId('DicomFilesUploader')}
             />
           )}
-          <span className="study-count">{studies.length}</span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginLeft: '20px',
+              paddingLeft: '20px',
+              borderLeft: '1px solid #23324a',
+            }}
+          >
+            {selectedUIDs.size > 0 && (
+              <button
+                className="btn btn-link"
+                style={{ padding: 0, fontSize: '13px' }}
+                onClick={handleClearSelection}
+              >
+                {t('Clear selection')}
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              disabled={selectedUIDs.size === 0}
+              style={{
+                opacity: selectedUIDs.size === 0 ? 0.4 : 1,
+                cursor: selectedUIDs.size === 0 ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              onClick={handleViewSelected}
+            >
+              {t('View Selected')}
+              {selectedUIDs.size > 0 ? ` (${selectedUIDs.size})` : ''}
+            </button>
+          </div>
+          <span className="study-count" style={{ marginLeft: '20px' }}>
+            {studies.length} {studies.length === 1 ? t('study') : t('studies')}
+          </span>
         </div>
       </div>
 
@@ -257,6 +340,10 @@ function StudyListRoute(props) {
             });
             history.push(viewerPath);
           }}
+          selectedStudyUIDs={selectedUIDs}
+          onToggleSelectStudy={handleToggleSelectStudy}
+          isAllSelected={isAllOnPageSelected}
+          onToggleSelectAll={handleToggleSelectAll}
           // Table Header
           sort={sort}
           onSort={handleSort}
