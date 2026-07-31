@@ -18,9 +18,10 @@ class NNUNet(BasicInferTask):
         self._label_colors = label_colors or {}
 
         from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
+        device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
         self.predictor = nnUNetPredictor(
             tile_step_size=0.5, use_gaussian=True, use_mirroring=True,
-            device=torch.device("cuda", 0))
+            device=device)
         self.predictor.initialize_from_trained_model_folder(
             model_folder, use_folds=folds, checkpoint_name=checkpoint)
 
