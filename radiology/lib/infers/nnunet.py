@@ -108,7 +108,7 @@ class NNUNet(BasicInferTask):
         seg.CopyInformation(sitk.ReadImage(image_path))
 
         fixed = os.path.join(out_dir, "seg.nrrd")
-        sitk.WriteImage(seg, fixed, useCompression=False)
+        sitk.WriteImage(seg, fixed, useCompression=True)
         log.info(f"WROTE {fixed} size={os.path.getsize(fixed)}")
         return fixed, {
             "label_names": self.labels,
