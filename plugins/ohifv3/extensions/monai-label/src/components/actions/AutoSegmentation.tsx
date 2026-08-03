@@ -73,7 +73,7 @@ export default class AutoSegmentation extends BaseTab {
       title: 'MONAI Label - ' + model,
       message: 'Running Auto-Segmentation...',
       type: 'info',
-      duration: 7000,
+      autoClose: false,
     });
 
     const config = this.props.onOptionsConfig();

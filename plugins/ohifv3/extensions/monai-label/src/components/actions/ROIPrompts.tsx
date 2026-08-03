@@ -190,7 +190,7 @@ export default class ROIPrompts extends BaseTab {
       title: 'MONAI Label - ' + model,
       message: 'Running ROI Prompt Inference...',
       type: 'info',
-      duration: 4000,
+      autoClose: false,
     });
 
     const config = this.props.onOptionsConfig();

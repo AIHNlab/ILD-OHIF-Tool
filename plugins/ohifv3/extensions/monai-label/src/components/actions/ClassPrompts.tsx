@@ -98,7 +98,7 @@ export default class ClassPrompts extends BaseTab {
       title: 'MONAI Label - ' + model,
       message: 'Running Class Based Inference...',
       type: 'info',
-      duration: 4000,
+      autoClose: false,
     });
 
     const label_names = [];

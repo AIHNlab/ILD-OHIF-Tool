@@ -92,7 +92,7 @@ export default class PointPrompts extends BaseTab {
       title: 'MONAI Label - ' + model,
       message: 'Running Point Based Inference...',
       type: 'info',
-      duration: 4000,
+      autoClose: false,
     });
 
     const { cornerstoneViewportService } = this.props.servicesManager.services;
