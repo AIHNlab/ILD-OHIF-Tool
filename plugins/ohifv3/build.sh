@@ -47,7 +47,7 @@ yarn config set workspaces-experimental true
 yarn install
 yarn run cli list
 
-APP_CONFIG=config/monai_label.js PUBLIC_URL=/ohif/ QUICK_BUILD=true yarn run build
+MSYS_NO_PATHCONV=1 APP_CONFIG=config/monai_label.js PUBLIC_URL=/ohif/ QUICK_BUILD=true yarn run build
 
 rm -rf ${install_dir}
 cp -r platform/app/dist/ ${install_dir}

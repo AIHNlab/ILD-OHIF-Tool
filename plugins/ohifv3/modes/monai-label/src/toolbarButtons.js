@@ -332,7 +332,7 @@ const toolbarButtons: Button[] = [
         }),
         createButton({
           id: 'RedoMonaiAnnotation',
-          icon: 'tool-redo',
+          icon: 'tool-rotate-right',
           label: 'Redo',
           tooltip: 'Redo annotation',
           commands: 'redoMonaiAnnotation',
