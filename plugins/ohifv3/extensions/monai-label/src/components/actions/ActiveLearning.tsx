@@ -31,7 +31,7 @@ export default class OptionTable extends BaseTab {
       title: 'MONAI Label',
       message: 'Running Active Learning strategy - ' + this.state.strategy,
       type: 'info',
-      duration: 60000,
+      autoClose: false,
     });
 
     const strategy = this.state.strategy;
