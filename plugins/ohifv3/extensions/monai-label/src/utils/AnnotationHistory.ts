@@ -3,6 +3,8 @@ import * as cornerstoneTools from '@cornerstonejs/tools';
 
 const TRACKED_TOOLS = ['ProbeMONAILabel', 'RectangleROI', 'PlanarFreehandROI'];
 
+type HistoryEntry = { type: 'add' | 'remove'; annotation: any };
+
 /**
  * Removing/re-adding annotations via the state API doesn't trigger the SVG
  * annotation overlay to redraw on its own (that only happens on tool
@@ -16,58 +18,107 @@ function renderAllViewports() {
 }
 
 /**
- * Tracks completed annotations for the ROI prompt tools (point/rectangle/
- * freehand) so they can be undone/redone. cornerstone3D has no built-in
- * undo/redo, so this listens for ANNOTATION_COMPLETED and maintains a simple
- * two-stack history (undo/redo) of annotation objects.
+ * Tracks completed AND removed annotations for the ROI prompt tools (point/
+ * rectangle/freehand) so both placing and deleting can be undone/redone.
+ * cornerstone3D has no built-in undo/redo, so this listens for
+ * ANNOTATION_COMPLETED and ANNOTATION_REMOVED and maintains a single
+ * command-style undo/redo stack. ANNOTATION_REMOVED fires for every removal
+ * path (right-click "Delete measurement" - single point or whole point-ROI,
+ * "Clear Points", and undo/redo's own state mutations), so `suppressTracking`
+ * is used while THIS class is the one doing the removing/re-adding, to avoid
+ * feeding its own actions back into the history.
  */
 class AnnotationHistory {
-  private undoStack: string[] = [];
-  private redoStack: any[] = [];
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
+  private suppressTracking = false;
 
   constructor() {
     eventTarget.addEventListener(
       cornerstoneTools.Enums.Events.ANNOTATION_COMPLETED,
       this.onAnnotationCompleted
     );
+    eventTarget.addEventListener(
+      cornerstoneTools.Enums.Events.ANNOTATION_REMOVED,
+      this.onAnnotationRemoved
+    );
   }
 
+  private isTracked = (annotation) =>
+    TRACKED_TOOLS.includes(annotation?.metadata?.toolName);
+
   private onAnnotationCompleted = (evt) => {
-    const { annotation } = evt.detail;
-    if (!TRACKED_TOOLS.includes(annotation.metadata?.toolName)) {
+    if (this.suppressTracking) {
       return;
     }
-    this.undoStack.push(annotation.annotationUID);
+    const { annotation } = evt.detail;
+    if (!this.isTracked(annotation)) {
+      return;
+    }
+    this.undoStack.push({ type: 'add', annotation });
     this.redoStack = [];
   };
 
-  undo = () => {
-    const uid = this.undoStack.pop();
-    if (!uid) {
+  private onAnnotationRemoved = (evt) => {
+    if (this.suppressTracking) {
       return;
     }
-    const manager = cornerstoneTools.annotation.state.getAnnotationManager();
-    const annotation = manager.getAnnotation(uid);
-    if (annotation) {
-      this.redoStack.push(annotation);
-      cornerstoneTools.annotation.state.removeAnnotation(uid);
-      renderAllViewports();
+    const { annotation } = evt.detail;
+    if (!this.isTracked(annotation)) {
+      return;
     }
+    this.undoStack.push({ type: 'remove', annotation });
+    this.redoStack = [];
   };
 
-  redo = () => {
-    const annotation = this.redoStack.pop();
-    if (!annotation) {
-      return;
+  private apply = (entry: HistoryEntry, direction: 'undo' | 'redo') => {
+    // undoing an 'add' removes it; undoing a 'remove' restores it - and
+    // vice-versa for redo.
+    const shouldRemove =
+      (direction === 'undo' && entry.type === 'add') ||
+      (direction === 'redo' && entry.type === 'remove');
+
+    this.suppressTracking = true;
+    try {
+      if (shouldRemove) {
+        cornerstoneTools.annotation.state.removeAnnotation(
+          entry.annotation.annotationUID
+        );
+      } else {
+        cornerstoneTools.annotation.state.addAnnotation(entry.annotation);
+      }
+    } finally {
+      this.suppressTracking = false;
     }
-    cornerstoneTools.annotation.state.addAnnotation(annotation);
-    this.undoStack.push(annotation.annotationUID);
     renderAllViewports();
   };
 
+  undo = () => {
+    const entry = this.undoStack.pop();
+    if (!entry) {
+      return;
+    }
+    this.apply(entry, 'undo');
+    this.redoStack.push(entry);
+  };
+
+  redo = () => {
+    const entry = this.redoStack.pop();
+    if (!entry) {
+      return;
+    }
+    this.apply(entry, 'redo');
+    this.undoStack.push(entry);
+  };
+
   clearAll = () => {
-    for (const toolName of TRACKED_TOOLS) {
-      cornerstoneTools.annotation.state.removeAnnotations(toolName);
+    this.suppressTracking = true;
+    try {
+      for (const toolName of TRACKED_TOOLS) {
+        cornerstoneTools.annotation.state.removeAnnotations(toolName);
+      }
+    } finally {
+      this.suppressTracking = false;
     }
     this.undoStack = [];
     this.redoStack = [];

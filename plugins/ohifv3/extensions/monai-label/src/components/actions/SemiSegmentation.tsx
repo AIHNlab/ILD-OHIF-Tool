@@ -12,6 +12,7 @@ limitations under the License.
 */
 
 import React from 'react';
+import { Icon } from '@ohif/ui';
 import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
 import * as cornerstoneTools from '@cornerstonejs/tools';
@@ -23,7 +24,7 @@ const SHAPE_TOOLS = {
   freehand: 'PlanarFreehandROI',
 };
 
-export default class ROIPrompts extends BaseTab {
+export default class SemiSegmentation extends BaseTab {
   modelSelector: any;
 
   constructor(props) {
@@ -66,10 +67,21 @@ export default class ROIPrompts extends BaseTab {
     });
   };
 
+  onUndo = () => {
+    this.props.commandsManager.runCommand('undoMonaiAnnotation');
+  };
+
+  onRedo = () => {
+    this.props.commandsManager.runCommand('redoMonaiAnnotation');
+  };
+
   getModels() {
     const { info } = this.props;
     return Object.keys(info.data.models).filter(
-      (m) => info.data.models[m].type === 'deepgrow'
+      (m) =>
+        info.data.models[m].type === 'segmentation' ||
+        info.data.models[m].type === 'deepgrow' ||
+        info.data.models[m].type === 'vista3d'
     );
   }
 
@@ -119,7 +131,12 @@ export default class ROIPrompts extends BaseTab {
     const xs = corners.map((p) => p[0]);
     const ys = corners.map((p) => p[1]);
     const z = corners[0][2];
-    return { box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), z] };
+    return {
+      roi: {
+        start: [Math.min(...xs), Math.min(...ys), z],
+        end: [Math.max(...xs), Math.max(...ys), z],
+      },
+    };
   }
 
   buildFreehandParams() {
@@ -188,7 +205,7 @@ export default class ROIPrompts extends BaseTab {
 
     const nid = this.notification.show({
       title: 'MONAI Label - ' + model,
-      message: 'Running ROI Prompt Inference...',
+      message: 'Running Semi-Segmentation Inference...',
       type: 'info',
       autoClose: false,
     });
@@ -210,7 +227,7 @@ export default class ROIPrompts extends BaseTab {
     if (response.status !== 200) {
       this.notification.show({
         title: 'MONAI Label - ' + model,
-        message: 'Failed to Run Inference for ROI Prompt',
+        message: 'Failed to Run Semi-Segmentation Inference',
         type: 'error',
         duration: 6000,
       });
@@ -219,7 +236,7 @@ export default class ROIPrompts extends BaseTab {
 
     this.notification.show({
       title: 'MONAI Label - ' + model,
-      message: 'Running Inference for ROI Prompt - Successful',
+      message: 'Running Semi-Segmentation Inference - Successful',
       type: 'success',
       duration: 4000,
     });
@@ -239,22 +256,78 @@ export default class ROIPrompts extends BaseTab {
           name="rd"
           id={this.tabId}
           className="tab-switch"
-          defaultValue="roiprompts"
+          defaultValue="semisegmentation"
           onClick={this.onSelectActionTab}
         />
         <label htmlFor={this.tabId} className="tab-label">
           <span className="tabLabelText">
-            ROI Prompts
+            Semi-Segmentation
             {this.props.isBusy && (
               <span className="tabBusyIndicator" title="Running…" />
             )}
           </span>
         </label>
         <div className="tab-content">
+          <div className="annotationToolRow">
+            <button
+              className="annotationToolButton"
+              title="Point"
+              style={{
+                backgroundColor:
+                  currentShape === 'point' ? '#00a4d9' : 'lightgray',
+              }}
+              onClick={() => this.onSelectShape('point')}
+            >
+              <Icon name="tool-probe" width="14px" height="14px" />
+              Point
+            </button>
+            <button
+              className="annotationToolButton"
+              title="Rectangle"
+              style={{
+                backgroundColor:
+                  currentShape === 'rectangle' ? '#00a4d9' : 'lightgray',
+              }}
+              onClick={() => this.onSelectShape('rectangle')}
+            >
+              <Icon name="tool-rectangle" width="14px" height="14px" />
+              Rectangle
+            </button>
+            <button
+              className="annotationToolButton"
+              title="Freehand"
+              style={{
+                backgroundColor:
+                  currentShape === 'freehand' ? '#00a4d9' : 'lightgray',
+              }}
+              onClick={() => this.onSelectShape('freehand')}
+            >
+              <Icon name="icon-tool-freehand-roi" width="14px" height="14px" />
+              Freehand
+            </button>
+            <button
+              className="annotationToolButton"
+              title="Undo last annotation"
+              style={{ backgroundColor: 'lightgray' }}
+              onClick={this.onUndo}
+            >
+              <Icon name="tool-reset" width="14px" height="14px" />
+              Undo
+            </button>
+            <button
+              className="annotationToolButton"
+              title="Redo annotation"
+              style={{ backgroundColor: 'lightgray' }}
+              onClick={this.onRedo}
+            >
+              <Icon name="tool-rotate-right" width="14px" height="14px" />
+              Redo
+            </button>
+          </div>
           <ModelSelector
             ref={this.modelSelector}
-            name="roiprompts"
-            title="ROIPrompts"
+            name="semisegmentation"
+            title="Semi-Segmentation"
             models={models}
             currentModel={this.state.currentModel}
             onClick={this.onRunInference}
@@ -262,35 +335,8 @@ export default class ROIPrompts extends BaseTab {
             usage={
               <div style={{ fontSize: 'smaller' }}>
                 <br />
-                <p>Draw a region of interest, then run inference.</p>
                 <p>
-                  <label>
-                    <input
-                      type="radio"
-                      name="roi-shape"
-                      checked={currentShape === 'point'}
-                      onChange={() => this.onSelectShape('point')}
-                    />
-                    &nbsp;Point&nbsp;
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="roi-shape"
-                      checked={currentShape === 'rectangle'}
-                      onChange={() => this.onSelectShape('rectangle')}
-                    />
-                    &nbsp;Rectangle&nbsp;
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="roi-shape"
-                      checked={currentShape === 'freehand'}
-                      onChange={() => this.onSelectShape('freehand')}
-                    />
-                    &nbsp;Freehand
-                  </label>
+                  Pick a tool above, draw on the image, then run inference.
                 </p>
               </div>
             }

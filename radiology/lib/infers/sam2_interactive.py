@@ -195,7 +195,8 @@ class SAM2InteractiveInferTask(BasicInferTask):
         if not ext.startswith("."):
             ext = "." + ext
         output_file = tempfile.NamedTemporaryFile(suffix=ext, delete=False).name
-        pred_sitk = sitk.GetImageFromArray(pred_masks.astype(np.uint16))
+        # keep uint8 - the OHIF client reads the NRRD payload as a Uint8Array unconditionally
+        pred_sitk = sitk.GetImageFromArray(pred_masks)
         pred_sitk.CopyInformation(sitk_img)
         sitk.WriteImage(pred_sitk, output_file)
 

@@ -11,9 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ProbeTool, annotation, drawing } from '@cornerstonejs/tools';
+import { getEnabledElement } from '@cornerstonejs/core';
+import { ProbeTool, annotation, drawing, utilities } from '@cornerstonejs/tools';
+import { vec2 } from 'gl-matrix';
 
 const { getAnnotations } = annotation.state;
+const { lineSegment } = utilities.math;
+
+// Radius (canvas px) around each vertex reserved for getHandleNearImagePoint
+// (select/delete just that one point) - isPointNearTool below must yield to
+// it near vertices so a click exactly on a point doesn't get swallowed by
+// the whole-group edge match. Keep in sync with the mirrored check in
+// Viewers' extensions/cornerstone/src/commandsModule.ts deleteMeasurement.
+const VERTEX_EXCLUSION_RADIUS = 10;
 
 export default class ProbeMONAILabelTool extends ProbeTool {
   static toolName = 'ProbeMONAILabel';
@@ -28,6 +38,51 @@ export default class ProbeMONAILabelTool extends ProbeTool {
   ) {
     super(toolProps, defaultToolProps);
   }
+
+  /**
+   * The base ProbeTool always returns false here since a single point has
+   * no "edge" - but this tool draws a connecting outline across ALL of its
+   * points (see renderAnnotation), so hovering that outline should glow the
+   * whole point set, the same way hovering a Rectangle/Freehand edge glows
+   * the whole shape. Ignores which specific annotation was passed in and
+   * re-checks the full group, so every point highlights together.
+   *
+   * Excludes a radius around each vertex so hovering/clicking a point still
+   * resolves to just that one point via getHandleNearImagePoint, instead of
+   * always matching the whole-group edge check first (cornerstone's nearby-
+   * annotation lookup checks isPointNearTool before getHandleNearImagePoint,
+   * and a vertex is trivially "near" its own adjacent edges).
+   */
+  isPointNearTool = (element, _annotation, canvasCoords, proximity = 6): boolean => {
+    const enabledElement = getEnabledElement(element);
+    if (!enabledElement) {
+      return false;
+    }
+    const { viewport } = enabledElement;
+    const annotations = getAnnotations(this.getToolName(), element);
+    if (!annotations || annotations.length < 2) {
+      return false;
+    }
+
+    const canvasPoints = annotations.map((a) =>
+      viewport.worldToCanvas((a as ProbeAnnotation).data.handles.points[0])
+    );
+
+    for (let i = 0; i < canvasPoints.length; i++) {
+      const start = canvasPoints[i];
+      const end = canvasPoints[(i + 1) % canvasPoints.length];
+      if (
+        vec2.distance(canvasCoords, start) < VERTEX_EXCLUSION_RADIUS ||
+        vec2.distance(canvasCoords, end) < VERTEX_EXCLUSION_RADIUS
+      ) {
+        continue;
+      }
+      if (lineSegment.distanceToPoint(start, end, canvasCoords) <= proximity) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   renderAnnotation = (enabledElement, svgDrawingHelper): boolean => {
     let renderStatus = false;

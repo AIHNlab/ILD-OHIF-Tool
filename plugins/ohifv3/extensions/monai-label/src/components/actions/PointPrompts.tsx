@@ -164,9 +164,11 @@ export default class PointPrompts extends BaseTab {
       label_names = [currentLabel];
     }
 
+    this.props.setBusy(true);
     const response = await this.props
       .client()
       .infer(model, displaySet.SeriesInstanceUID, params);
+    this.props.setBusy(false);
     // console.log(response);
 
     hideNotification(nid, this.notification);
@@ -323,7 +325,12 @@ export default class PointPrompts extends BaseTab {
           onClick={this.onSelectActionTab}
         />
         <label htmlFor={this.tabId} className="tab-label">
-          Point Prompts
+          <span className="tabLabelText">
+            Point Prompts
+            {this.props.isBusy && (
+              <span className="tabBusyIndicator" title="Running…" />
+            )}
+          </span>
         </label>
         <div className="tab-content">
           <ModelSelector

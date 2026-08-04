@@ -278,69 +278,6 @@ const toolbarButtons: Button[] = [
       ],
     },
   },
-  {
-    id: 'AnnotationTools',
-    uiType: 'ohif.splitButton',
-    props: {
-      groupId: 'AnnotationTools',
-      evaluate: 'evaluate.group.promoteToPrimaryIfCornerstoneToolNotActiveInTheList',
-      primary: createButton({
-        id: 'ProbeMONAILabel',
-        icon: 'tool-probe',
-        label: 'Point',
-        tooltip: 'Point Prompt',
-        commands: setToolActiveToolbar,
-        evaluate: 'evaluate.cornerstoneTool',
-      }),
-      secondary: {
-        icon: 'chevron-down',
-        label: '',
-        tooltip: 'Annotation Tools',
-      },
-      items: [
-        createButton({
-          id: 'ProbeMONAILabel',
-          icon: 'tool-probe',
-          label: 'Point',
-          tooltip: 'Point Prompt',
-          commands: setToolActiveToolbar,
-          evaluate: 'evaluate.cornerstoneTool',
-        }),
-        createButton({
-          id: 'RectangleROI',
-          icon: 'tool-rectangle',
-          label: 'Rectangle',
-          tooltip: 'Rectangle ROI',
-          commands: setToolActiveToolbar,
-          evaluate: 'evaluate.cornerstoneTool',
-        }),
-        createButton({
-          id: 'PlanarFreehandROI',
-          icon: 'icon-tool-freehand-roi',
-          label: 'Freehand',
-          tooltip: 'Freehand ROI',
-          commands: setToolActiveToolbar,
-          evaluate: 'evaluate.cornerstoneTool',
-        }),
-        createButton({
-          id: 'UndoMonaiAnnotation',
-          icon: 'tool-reset',
-          label: 'Undo',
-          tooltip: 'Undo last annotation',
-          commands: 'undoMonaiAnnotation',
-          evaluate: 'evaluate.action',
-        }),
-        createButton({
-          id: 'RedoMonaiAnnotation',
-          icon: 'tool-rotate-right',
-          label: 'Redo',
-          tooltip: 'Redo annotation',
-          commands: 'redoMonaiAnnotation',
-          evaluate: 'evaluate.action',
-        }),
-      ],
-    },
-  },
 ];
 
 export default toolbarButtons;

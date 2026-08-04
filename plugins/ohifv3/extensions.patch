@@ -24,3 +24,157 @@ index 06ae62e55..d0be6b022 100644
      {
        "packageName": "@ohif/mode-basic-dev-mode",
        "default": false,
+diff --git a/platform/ui-next/src/components/Sonner/Sonner.tsx b/platform/ui-next/src/components/Sonner/Sonner.tsx
+index 368e8edea0..4365ee1f66 100644
+--- a/platform/ui-next/src/components/Sonner/Sonner.tsx
++++ b/platform/ui-next/src/components/Sonner/Sonner.tsx
+@@ -20,7 +20,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
+       toastOptions={{
+         style: {
+           width: '430px', // Set a maximum width
+-          right: '8px',
+         },
+       }}
+       {...props}
+diff --git a/extensions/cornerstone/src/initMeasurementService.ts b/extensions/cornerstone/src/initMeasurementService.ts
+index 9433bb5ef2..35a2888279 100644
+--- a/extensions/cornerstone/src/initMeasurementService.ts
++++ b/extensions/cornerstone/src/initMeasurementService.ts
+@@ -164,6 +164,18 @@ const initMeasurementService = (
+     Probe.toMeasurement
+   );
+ 
++  // MONAI Label's point-prompt tool - a Probe subclass (see
++  // extensions/monai-label/src/tools/ProbeMONAILabelTool.ts) - needs its own
++  // mapping entry so its annotations are registered with measurementService,
++  // which is what the right-click "Delete measurement" context menu acts on.
++  measurementService.addMapping(
++    csTools3DVer1MeasurementSource,
++    'ProbeMONAILabel',
++    Probe.matchingCriteria,
++    Probe.toAnnotation,
++    Probe.toMeasurement
++  );
++
+   measurementService.addMapping(
+     csTools3DVer1MeasurementSource,
+     'UltrasoundDirectionalTool',
+diff --git a/extensions/cornerstone/src/utils/measurementServiceMappings/constants/supportedTools.js b/extensions/cornerstone/src/utils/measurementServiceMappings/constants/supportedTools.js
+index a3f9c832c2..74f7db5325 100644
+--- a/extensions/cornerstone/src/utils/measurementServiceMappings/constants/supportedTools.js
++++ b/extensions/cornerstone/src/utils/measurementServiceMappings/constants/supportedTools.js
+@@ -7,6 +7,7 @@ const supportedTools = [
+   'Angle',
+   'CobbAngle',
+   'Probe',
++  'ProbeMONAILabel',
+   'RectangleROI',
+   'PlanarFreehandROI',
+   'SplineROI',
+diff --git a/extensions/cornerstone/src/utils/measurementServiceMappings/measurementServiceMappingsFactory.ts b/extensions/cornerstone/src/utils/measurementServiceMappings/measurementServiceMappingsFactory.ts
+index 041c767b6a..4ddf42e661 100644
+--- a/extensions/cornerstone/src/utils/measurementServiceMappings/measurementServiceMappingsFactory.ts
++++ b/extensions/cornerstone/src/utils/measurementServiceMappings/measurementServiceMappingsFactory.ts
+@@ -47,6 +47,7 @@ const measurementServiceMappingsFactory = (
+       SplineROI: POLYLINE,
+       LivewireContour: POLYLINE,
+       Probe: POINT,
++      ProbeMONAILabel: POINT,
+       UltrasoundDirectional: POLYLINE,
+     };
+ 
+diff --git a/package.json b/package.json
+index c82cd7a69c..ba18115582 100644
+--- a/package.json
++++ b/package.json
+@@ -41,6 +41,7 @@
+     "orthanc:up": "docker compose -f platform/app/.recipes/Nginx-Orthanc/docker-compose.yml up",
+     "install:dev": "cp -f yarn.lock addOns/yarn.lock && cd addOns && yarn install --modules-folder ../node_modules",
+     "preinstall": "node preinstall.js",
++    "postinstall": "patch-package",
+     "start": "yarn run dev",
+     "test": "yarn run test:unit",
+     "test:data": "git submodule update --init -f testdata",
+@@ -86,8 +87,10 @@
+     "@babel/preset-env": "7.24.7",
+     "@babel/preset-react": "^7.16.7",
+     "@babel/preset-typescript": "^7.13.0",
++    "patch-package": "^8.0.1",
+     "prettier": "^3.3.3",
+-    "prettier-plugin-tailwindcss": "0.6.8"
++    "prettier-plugin-tailwindcss": "0.6.8",
++    "webpack-cli": "^5"
+   },
+   "husky": {
+     "hooks": {
+diff --git a/patches/@cornerstonejs+tools+2.2.3.patch b/patches/@cornerstonejs+tools+2.2.3.patch
+new file mode 100644
+index 0000000000..78af42c8be
+--- /dev/null
++++ b/patches/@cornerstonejs+tools+2.2.3.patch
+@@ -0,0 +1,13 @@
++diff --git a/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js b/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
++index 3a33503..56b271d 100644
++--- a/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
+++++ b/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
++@@ -63,7 +63,7 @@ class AnnotationTool extends AnnotationDisplayTool {
++                 const activateHandleIndex = data.handles
++                     ? data.handles.activeHandleIndex
++                     : undefined;
++-                const near = this._imagePointNearToolOrHandle(element, annotation, canvasCoords, 6);
+++                const near = this._imagePointNearToolOrHandle(element, annotation, canvasCoords, 10);
++                 const nearToolAndNotMarkedActive = near && !annotation.highlighted;
++                 const notNearToolAndMarkedActive = !near && annotation.highlighted;
++                 if (nearToolAndNotMarkedActive || notNearToolAndMarkedActive) {
+diff --git a/extensions/cornerstone/src/commandsModule.ts b/extensions/cornerstone/src/commandsModule.ts
+index 857997dee1..cf7746b648 100644
+--- a/extensions/cornerstone/src/commandsModule.ts
++++ b/extensions/cornerstone/src/commandsModule.ts
+@@ -21,7 +21,7 @@ import {
+   callInputDialog,
+   colorPickerDialog,
+ } from '@ohif/extension-default';
+-import { vec3, mat4 } from 'gl-matrix';
++import { vec2, vec3, mat4 } from 'gl-matrix';
+ 
+ import CornerstoneViewportDownloadForm from './utils/CornerstoneViewportDownloadForm';
+ import toggleImageSliceSync from './utils/imageSliceSync/toggleImageSliceSync';
+@@ -181,10 +181,35 @@ function commandsModule({
+         : null;
+     },
+     /** Delete the given measurement */
+-    deleteMeasurement: ({ uid }) => {
+-      if (uid) {
+-        measurementServiceSource.remove(uid);
++    deleteMeasurement: ({ uid, element, event }) => {
++      if (!uid) {
++        return;
++      }
++      const measurement = measurementService.getMeasurement(uid);
++      // MONAI Label's point-prompt tool draws every placed point as its own
++      // annotation, connected only by a cosmetic outline (see
++      // extensions/monai-label/src/tools/ProbeMONAILabelTool.ts). Clicking
++      // exactly on a point deletes just that point; clicking the connecting
++      // edge (away from any vertex) clears the whole point set, matching
++      // how deleting a Rectangle/Freehand ROI removes the whole shape.
++      if (measurement?.toolName === 'ProbeMONAILabel') {
++        const canvasCoords = event?.detail?.currentPoints?.canvas;
++        const enabledElement = element && getEnabledElement(element);
++        const point = measurement.points?.[0];
++        const isOnVertex =
++          enabledElement && canvasCoords && point
++            ? vec2.distance(canvasCoords, enabledElement.viewport.worldToCanvas(point)) < 10
++            : true; // no click info available - be conservative, delete just this one
++
++        if (!isOnVertex) {
++          measurementService
++            .getMeasurements()
++            .filter(m => m.toolName === 'ProbeMONAILabel')
++            .forEach(m => measurementServiceSource.remove(m.uid));
++          return;
++        }
+       }
++      measurementServiceSource.remove(uid);
+     },
+     /**
+      * Show the measurement labelling input dialog and update the label

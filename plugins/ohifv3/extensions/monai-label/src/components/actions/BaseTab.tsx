@@ -24,6 +24,8 @@ export default class BaseTab extends Component {
     info: PropTypes.any,
     client: PropTypes.func,
     updateView: PropTypes.func,
+    setBusy: PropTypes.func,
+    isBusy: PropTypes.bool,
     onSelectActionTab: PropTypes.func,
     onOptionsConfig: PropTypes.func,
     getActiveViewportInfo: PropTypes.func,

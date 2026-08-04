@@ -133,6 +133,49 @@ limitations under the License.
   top: 2px;
   bottom: 2px;
 }
+.monaiLabelPanel .annotationToolRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+.monaiLabelPanel .annotationToolButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #000;
+  border-radius: 4px;
+  color: #000;
+  font-size: 11px;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+  flex: 1 1 auto;
+}
+.monaiLabelPanel .annotationToolButton svg {
+  flex-shrink: 0;
+}
+.monaiLabelPanel .annotationToolButton:hover {
+  opacity: 0.85;
+}
+.monaiLabelPanel .tabLabelText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.monaiLabelPanel .tabBusyIndicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: monaiLabelSpin 0.7s linear infinite;
+}
+@keyframes monaiLabelSpin {
+  to { transform: rotate(360deg); }
+}
 .scrollbar {
   overflow-y: scroll;
 }

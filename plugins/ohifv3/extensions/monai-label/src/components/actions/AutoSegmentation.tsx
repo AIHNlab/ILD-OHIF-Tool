@@ -12,6 +12,7 @@ limitations under the License.
 */
 
 import React from 'react';
+import { cache } from '@cornerstonejs/core';
 import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
 import { hideNotification } from '../../utils/GenericUtils';
@@ -69,6 +70,18 @@ export default class AutoSegmentation extends BaseTab {
       return;
     }
 
+    const volumeId = `${displaySet.volumeLoaderSchema}:${displaySet.displaySetInstanceUID}`;
+    const volume = cache.getVolume(volumeId);
+    if (!volume || !volume.loadStatus?.loaded) {
+      this.notification.show({
+        title: 'MONAI Label',
+        message: 'Please wait for the image to finish loading before running segmentation',
+        type: 'warning',
+        duration: 4000,
+      });
+      return;
+    }
+
     const nid = this.notification.show({
       title: 'MONAI Label - ' + model,
       message: 'Running Auto-Segmentation...',
@@ -99,9 +112,11 @@ export default class AutoSegmentation extends BaseTab {
       params['label_prompt'] = filteredLabelClasses;
     }
 
+    this.props.setBusy(true);
     const response = await this.props
       .client()
       .infer(model, displaySet.SeriesInstanceUID, params);
+    this.props.setBusy(false);
     // console.log(response);
 
     hideNotification(nid, this.notification);
@@ -139,7 +154,12 @@ export default class AutoSegmentation extends BaseTab {
           defaultChecked
         />
         <label htmlFor={this.tabId} className="tab-label">
-          Auto-Segmentation
+          <span className="tabLabelText">
+            Auto-Segmentation
+            {this.props.isBusy && (
+              <span className="tabBusyIndicator" title="Running…" />
+            )}
+          </span>
         </label>
         <div className="tab-content">
           <ModelSelector

@@ -124,9 +124,11 @@ export default class ClassPrompts extends BaseTab {
       config && config.infer && config.infer[model] ? config.infer[model] : {};
     params['label_prompt'] = label_classes;
 
+    this.props.setBusy(true);
     const response = await this.props
       .client()
       .infer(model, displaySet.SeriesInstanceUID, params);
+    this.props.setBusy(false);
     // console.log(response.data);
 
     hideNotification(nid, this.notification);
@@ -336,7 +338,12 @@ export default class ClassPrompts extends BaseTab {
           onClick={this.onSelectActionTab}
         />
         <label htmlFor={this.tabId} className="tab-label">
-          Class Prompts
+          <span className="tabLabelText">
+            Class Prompts
+            {this.props.isBusy && (
+              <span className="tabBusyIndicator" title="Running…" />
+            )}
+          </span>
         </label>
         <div className="tab-content">
           <ModelSelector

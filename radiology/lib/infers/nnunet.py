@@ -85,16 +85,20 @@ class NNUNet(BasicInferTask):
                                           save_probabilities=False, overwrite=True)
         result = glob.glob(os.path.join(out_dir, "*.nii.gz"))[0]
 
+        # uint8, not uint16: the OHIF client (MonaiLabelPanel.updateView) reads the
+        # NRRD payload as a Uint8Array unconditionally, so a wider dtype here just
+        # gets bytes misaligned/split on the client - fine anyway since label counts
+        # are always well under 256
         if bbox:
             xmin, xmax, ymin, ymax, zmin, zmax = bbox
             pred_nii = nib.load(result)
-            pred_arr = np.asanyarray(pred_nii.dataobj).astype(np.uint16)
+            pred_arr = np.asanyarray(pred_nii.dataobj).astype(np.uint8)
             nii = orig_nii
-            arr = np.zeros(orig_nii.shape, dtype=np.uint16)
+            arr = np.zeros(orig_nii.shape, dtype=np.uint8)
             arr[xmin:xmax, ymin:ymax, zmin:zmax] = pred_arr
         else:
             nii   = nib.load(result)
-            arr   = np.asanyarray(nii.dataobj).astype(np.uint16)
+            arr   = np.asanyarray(nii.dataobj).astype(np.uint8)
 
         log.info(f"NNUNET unique labels: {np.unique(arr)}")
 

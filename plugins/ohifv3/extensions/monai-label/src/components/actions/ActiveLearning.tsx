@@ -40,7 +40,9 @@ export default class OptionTable extends BaseTab {
       config && config.activelearning && config.activelearning[strategy]
         ? config.activelearning[strategy]
         : {};
+    this.props.setBusy(true);
     const response = await this.props.client().next_sample(strategy, params);
+    this.props.setBusy(false);
     if (!nid) {
       window.snackbar.hideAll();
     } else {
@@ -139,7 +141,12 @@ export default class OptionTable extends BaseTab {
           defaultValue="activelearning"
         />
         <label className="tab-label" htmlFor={this.tabId}>
-          Active Learning
+          <span className="tabLabelText">
+            Active Learning
+            {this.props.isBusy && (
+              <span className="tabBusyIndicator" title="Running…" />
+            )}
+          </span>
         </label>
         <div className="tab-content">
           <table style={{ fontSize: 'smaller', width: '100%' }}>

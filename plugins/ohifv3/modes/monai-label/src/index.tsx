@@ -74,7 +74,6 @@ function modeFactory({ modeConfiguration }) {
         'MPR',
         'Crosshairs',
         'MoreTools',
-        'AnnotationTools',
       ]);
       toolbarService.createButtonSection('segmentationToolbox', ['BrushTools', 'Shapes']);
     },

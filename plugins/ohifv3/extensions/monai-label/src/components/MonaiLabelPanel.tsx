@@ -15,6 +15,7 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import './MonaiLabelPanel.css';
 import AutoSegmentation from './actions/AutoSegmentation';
+import SemiSegmentation from './actions/SemiSegmentation';
 import PointPrompts from './actions/PointPrompts';
 import ROIPrompts from './actions/ROIPrompts';
 import ClassPrompts from './actions/ClassPrompts';
@@ -29,7 +30,7 @@ import SettingsTable from './SettingsTable';
 import * as cornerstoneTools from '@cornerstonejs/tools';
 import optionsInputDialog from './OptionsInputDialog';
 
-export default class MonaiLabelPanel extends Component {
+export default class MonaiLabelPanel extends Component<any, any> {
   static propTypes = {
     commandsManager: PropTypes.any,
     servicesManager: PropTypes.any,
@@ -41,6 +42,7 @@ export default class MonaiLabelPanel extends Component {
   actions: {
     activelearning: any;
     segmentation: any;
+    semisegmentation: any;
     pointprompts: any;
     roiprompts: any;
     classprompts: any;
@@ -56,6 +58,7 @@ export default class MonaiLabelPanel extends Component {
     this.actions = {
       activelearning: React.createRef(),
       segmentation: React.createRef(),
+      semisegmentation: React.createRef(),
       pointprompts: React.createRef(),
       roiprompts: React.createRef(),
       classprompts: React.createRef(),
@@ -65,8 +68,15 @@ export default class MonaiLabelPanel extends Component {
       info: { models: [], datasets: [] },
       action: {},
       options: {},
+      busyActions: {},
     };
   }
+
+  setBusy = (action, isBusy) => {
+    this.setState((prevState) => ({
+      busyActions: { ...prevState.busyActions, [action]: isBusy },
+    }));
+  };
 
   client = () => {
     const settings =
@@ -432,6 +442,8 @@ export default class MonaiLabelPanel extends Component {
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('activelearning', busy)}
+              isBusy={!!this.state.busyActions['activelearning']}
               onSelectActionTab={this.onSelectActionTab}
               onOptionsConfig={this.onOptionsConfig}
               getActiveViewportInfo={this.getActiveViewportInfo}
@@ -442,16 +454,34 @@ export default class MonaiLabelPanel extends Component {
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('segmentation', busy)}
+              isBusy={!!this.state.busyActions['segmentation']}
               onSelectActionTab={this.onSelectActionTab}
               onOptionsConfig={this.onOptionsConfig}
               getActiveViewportInfo={this.getActiveViewportInfo}
             />
-            <PointPrompts
-              ref={this.actions['pointprompts']}
+            <SemiSegmentation
+              ref={this.actions['semisegmentation']}
               tabIndex={3}
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('semisegmentation', busy)}
+              isBusy={!!this.state.busyActions['semisegmentation']}
+              onSelectActionTab={this.onSelectActionTab}
+              onOptionsConfig={this.onOptionsConfig}
+              getActiveViewportInfo={this.getActiveViewportInfo}
+              servicesManager={this.props.servicesManager}
+              commandsManager={this.props.commandsManager}
+            />
+            <PointPrompts
+              ref={this.actions['pointprompts']}
+              tabIndex={4}
+              info={this.state.info}
+              client={this.client}
+              updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('pointprompts', busy)}
+              isBusy={!!this.state.busyActions['pointprompts']}
               onSelectActionTab={this.onSelectActionTab}
               onOptionsConfig={this.onOptionsConfig}
               getActiveViewportInfo={this.getActiveViewportInfo}
@@ -460,10 +490,12 @@ export default class MonaiLabelPanel extends Component {
             />
             <ROIPrompts
               ref={this.actions['roiprompts']}
-              tabIndex={4}
+              tabIndex={5}
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('roiprompts', busy)}
+              isBusy={!!this.state.busyActions['roiprompts']}
               onSelectActionTab={this.onSelectActionTab}
               onOptionsConfig={this.onOptionsConfig}
               getActiveViewportInfo={this.getActiveViewportInfo}
@@ -472,10 +504,12 @@ export default class MonaiLabelPanel extends Component {
             />
             <ClassPrompts
               ref={this.actions['classprompts']}
-              tabIndex={5}
+              tabIndex={6}
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}
+              setBusy={(busy: boolean) => this.setBusy('classprompts', busy)}
+              isBusy={!!this.state.busyActions['classprompts']}
               onSelectActionTab={this.onSelectActionTab}
               onOptionsConfig={this.onOptionsConfig}
               getActiveViewportInfo={this.getActiveViewportInfo}
