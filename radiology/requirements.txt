@@ -8,3 +8,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
+# The checkpoint_ild.pt weights (see radiology/model/sam2/) were fine-tuned
+# with bowang-lab/MedSAM2, whose sam2.build_sam module adds
+# build_sam2_video_predictor_npz - not present in facebookresearch/sam2.
+#
+# MedSAM2's setup.py demands numpy>=2.0.1, which pip will pull in - but
+# nptyping/pydicom-seg (used by the existing nnU-Net -> DICOM-SEG export
+# path) need numpy<2.0, and MedSAM2 runs fine on 1.26.4 in practice despite
+# its stated floor. After installing this file, run:
+#   pip install "numpy==1.26.4" --no-deps
+# to put numpy back down, or pip's resolver will error on the conflict.
+#
+# MedSAM2's pip build also doesn't ship its Hydra config yamls (missing
+# MANIFEST.in upstream - github.com/bowang-lab/MedSAM2/tree/main/sam2/configs
+# exists in the repo but not in the built wheel). After installing, copy
+# sam2.1_hiera_t512.yaml (and siblings, if needed) from that repo path into
+# site-packages/sam2/configs/ by hand.
+MedSAM2 @ git+https://github.com/bowang-lab/MedSAM2.git@332f30d420f1d1b08e2a79b3ae6a602458808383 ; python_version >= '3.10'

@@ -48,14 +48,24 @@ def _scale_xy(x: float, y: float, w: int, h: int) -> tuple:
     return x * SAM2_SIZE / w, y * SAM2_SIZE / h
 
 
-def _rasterize_polygon(vertices, w: int, h: int) -> np.ndarray:
-    """Freehand ROI vertices (index-space, on one slice) -> a SAM2_SIZE x SAM2_SIZE binary mask."""
+MAX_PROMPT_POINTS = 40
+
+
+def _polygon_interior_points(vertices, w: int, h: int, max_points: int = MAX_PROMPT_POINTS) -> np.ndarray:
+    """Freehand ROI vertices (index-space, on one slice) -> point prompts sampled
+    from inside the drawn polygon, fed to add_new_points_or_box (not a mask prompt
+    via add_new_mask - point prompts are what this model was validated against)."""
     from PIL import ImageDraw
 
     scaled = [_scale_xy(x, y, w, h) for x, y in vertices]
     mask_img = PILImage.new("L", (SAM2_SIZE, SAM2_SIZE), 0)
     ImageDraw.Draw(mask_img).polygon(scaled, outline=1, fill=1)
-    return np.array(mask_img, dtype=np.uint8)
+    ys, xs = np.where(np.array(mask_img) > 0)
+    pts = np.stack([xs, ys], axis=1).astype(np.float32)
+    if len(pts) > max_points:
+        idx = np.random.choice(len(pts), max_points, replace=False)
+        pts = pts[idx]
+    return pts
 
 
 class SAM2InteractiveInferTask(BasicInferTask):
@@ -66,8 +76,12 @@ class SAM2InteractiveInferTask(BasicInferTask):
     "key" slice, then propagates the resulting mask forward and backward
     through the volume:
       - foreground/background click points
-      - a rectangle (box)
-      - a freehand polygon (rasterized into a mask prompt)
+      - a rectangle ROI (start/end corners, same shape nnU-Net's ROI crop uses)
+      - a freehand polygon (sampled into interior point prompts)
+
+    SAM2 only ever produces one binary object mask per run, but the model may
+    be configured with several labels (e.g. the 8 ILD patterns) - the request's
+    "label" field picks which one this run's mask should be written as.
     """
 
     def __init__(self, checkpoint_path: str, labels, label_colors=None, description: str = ""):
@@ -130,9 +144,10 @@ class SAM2InteractiveInferTask(BasicInferTask):
         device = request.get("device", "cuda")
         foreground = request.get("foreground", [])  # [[x, y, z], ...]
         background = request.get("background", [])  # [[x, y, z], ...]
-        box = request.get("box")  # [xmin, ymin, xmax, ymax, z]
+        roi = request.get("roi")  # {"start": [xmin, ymin, z], "end": [xmax, ymax, z]}
         mask_polygon = request.get("mask_polygon")  # [[x, y], ...]
         roi_slice = request.get("roi_slice")
+        label_value = self.labels.get(request.get("label"), 1)
 
         sitk_img = sitk.ReadImage(image_path)
         img_np = sitk.GetArrayFromImage(sitk_img).astype(np.float32)  # (D, H, W)
@@ -147,15 +162,19 @@ class SAM2InteractiveInferTask(BasicInferTask):
         with torch.inference_mode():
             if mask_polygon:
                 key_slice = int(roi_slice)
-                mask = _rasterize_polygon(mask_polygon, w, h)
+                pts = _polygon_interior_points(mask_polygon, w, h)
+                lbs = np.ones(len(pts), dtype=np.int32)
 
                 def add_prompt(predictor, state, frame_idx):
-                    predictor.add_new_mask(inference_state=state, frame_idx=frame_idx, obj_id=1, mask=mask)
+                    predictor.add_new_points_or_box(
+                        inference_state=state, frame_idx=frame_idx, obj_id=1, points=pts, labels=lbs
+                    )
 
                 pred_masks = self._propagate(predictor, imgs_tensor, key_slice, add_prompt, d, h, w)
 
-            elif box:
-                xmin, ymin, xmax, ymax, z = box
+            elif roi:
+                xmin, ymin, z = roi["start"]
+                xmax, ymax, _ = roi["end"]
                 key_slice = int(z)
                 x0, y0 = _scale_xy(xmin, ymin, w, h)
                 x1, y1 = _scale_xy(xmax, ymax, w, h)
@@ -189,7 +208,10 @@ class SAM2InteractiveInferTask(BasicInferTask):
                 pred_masks = self._propagate(predictor, imgs_tensor, key_slice, add_prompt, d, h, w)
 
             else:
-                logger.warning("SAM2 inference called with no prompt (foreground/box/mask_polygon)")
+                logger.warning("SAM2 inference called with no prompt (foreground/roi/mask_polygon)")
+
+        if label_value != 1:
+            pred_masks = pred_masks * label_value
 
         ext = request.get("result_extension", ".nrrd")
         if not ext.startswith("."):

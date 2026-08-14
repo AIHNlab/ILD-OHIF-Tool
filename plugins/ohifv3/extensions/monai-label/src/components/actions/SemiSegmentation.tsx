@@ -34,12 +34,31 @@ export default class SemiSegmentation extends BaseTab {
     this.state = {
       currentModel: null,
       currentShape: 'point',
+      currentLabel: null,
     };
   }
 
   onSelectModel = (model) => {
-    this.setState({ currentModel: model });
+    this.setState({ currentModel: model, currentLabel: null });
   };
+
+  onSelectLabel = (evt) => {
+    this.setState({ currentLabel: evt.target.value });
+  };
+
+  getModelLabels(model) {
+    const { info } = this.props;
+    const names = (model && info.modelLabelNames[model]) || [];
+    return names.filter((name) => name !== 'background');
+  }
+
+  // The model dropdown (ModelSelector) silently defaults to its first entry
+  // until the user changes it, without telling this component - mirror that
+  // here so the label dropdown/inference request stay in sync by default.
+  getCurrentLabel(model) {
+    const labels = this.getModelLabels(model);
+    return this.state.currentLabel || labels[0] || null;
+  }
 
   onSelectShape = (shape) => {
     this.activateShapeTool(shape);
@@ -186,6 +205,7 @@ export default class SemiSegmentation extends BaseTab {
       });
       return;
     }
+    const currentLabel = this.getCurrentLabel(model);
 
     const roiBuilders = {
       point: this.buildPointParams,
@@ -213,6 +233,7 @@ export default class SemiSegmentation extends BaseTab {
     const config = this.props.onOptionsConfig();
     const params = {
       ...(config && config.infer && config.infer[model] ? config.infer[model] : {}),
+      ...(currentLabel ? { label: currentLabel } : {}),
       ...roi,
     };
     const label_names = info.modelLabelNames[model];
@@ -248,6 +269,11 @@ export default class SemiSegmentation extends BaseTab {
     const models = this.getModels();
     const display = models.length > 0 ? 'block' : 'none';
     const { currentShape } = this.state;
+    // ModelSelector defaults to the first model until the user changes it
+    // without telling this component - mirror that default here too.
+    const model = this.state.currentModel || models[0] || null;
+    const labels = this.getModelLabels(model);
+    const currentLabel = this.getCurrentLabel(model);
 
     return (
       <div className="tab" style={{ display: display }}>
@@ -341,6 +367,23 @@ export default class SemiSegmentation extends BaseTab {
               </div>
             }
           />
+          {labels.length > 0 && (
+            <div className="annotationToolRow">
+              <label htmlFor="semiSegmentationClass">Class:</label>
+              <select
+                id="semiSegmentationClass"
+                className="selectBox"
+                value={currentLabel || ''}
+                onChange={this.onSelectLabel}
+              >
+                {labels.map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
     );
