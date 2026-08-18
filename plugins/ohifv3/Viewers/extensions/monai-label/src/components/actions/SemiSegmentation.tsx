@@ -17,7 +17,7 @@ import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
 import * as cornerstoneTools from '@cornerstonejs/tools';
 import { getEnabledElements } from '@cornerstonejs/core';
-import { hideNotification } from '../../utils/GenericUtils';
+import { hideNotification, describeError } from '../../utils/GenericUtils';
 import { renderAllViewports } from '../../utils/AnnotationHistory';
 
 const SHAPE_TOOLS = {
@@ -799,6 +799,7 @@ export default class SemiSegmentation extends BaseTab {
     this.props.setBusy(true);
 
     let failures = 0;
+    let lastError = null;
     let pointRunSucceeded = false;
     let brushRunSucceeded = false;
     let excludeUsed = false;
@@ -853,6 +854,8 @@ export default class SemiSegmentation extends BaseTab {
 
         if (response.status !== 200) {
           failures++;
+          lastError = response;
+          console.error('Semi-Segmentation prompt failed', response);
           continue;
         }
 
@@ -901,9 +904,9 @@ export default class SemiSegmentation extends BaseTab {
       if (failures === prompts.length) {
         this.notification.show({
           title: 'MONAI Label - ' + model,
-          message: 'Failed to Run Semi-Segmentation Inference',
+          message: `Semi-Segmentation Inference failed: ${describeError(lastError)}`,
           type: 'error',
-          duration: 6000,
+          duration: 8000,
         });
         return;
       }
@@ -912,19 +915,19 @@ export default class SemiSegmentation extends BaseTab {
         title: 'MONAI Label - ' + model,
         message:
           failures > 0
-            ? `Running Semi-Segmentation Inference - ${prompts.length - failures}/${prompts.length} succeeded`
+            ? `Running Semi-Segmentation Inference - ${prompts.length - failures}/${prompts.length} succeeded (${describeError(lastError)})`
             : 'Running Semi-Segmentation Inference - Successful',
         type: failures > 0 ? 'warning' : 'success',
-        duration: 4000,
+        duration: failures > 0 ? 8000 : 4000,
       });
     } catch (e) {
       console.error('Semi-Segmentation inference failed', e);
       hideNotification(nid, this.notification);
       this.notification.show({
         title: 'MONAI Label - ' + model,
-        message: 'Failed to Run Semi-Segmentation Inference',
+        message: `Semi-Segmentation Inference failed: ${describeError(e)}`,
         type: 'error',
-        duration: 6000,
+        duration: 8000,
       });
     } finally {
       this.props.setBusy(false);

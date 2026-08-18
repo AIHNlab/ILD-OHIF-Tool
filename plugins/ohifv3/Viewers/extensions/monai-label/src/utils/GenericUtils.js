@@ -90,6 +90,60 @@ function hideNotification(nid, notification) {
   }
 }
 
+// Turns a failed MonaiLabelClient call into a short, specific string - what
+// the server actually said, or what actually threw - instead of a generic
+// "Something failed" that gives no lead for debugging. MonaiLabelClient's
+// api_get/api_post never reject (they catch the axios error and resolve
+// with it instead - see MonaiLabelClient.js), so a non-200 "response" from
+// one of those calls IS the raw axios error object, same shape as a real
+// thrown exception (e) from anywhere else in a try/catch - this handles both.
+function describeError(err) {
+  if (!err) {
+    return 'Unknown error';
+  }
+  if (err.response) {
+    // A request that reached the server, which then responded with a
+    // non-2xx status - surface whatever the server said (FastAPI's
+    // standard error body is {"detail": ...}) alongside the raw status,
+    // not just the status number alone.
+    const { status, statusText, data } = err.response;
+    let bodyText = '';
+    try {
+      bodyText =
+        data instanceof ArrayBuffer
+          ? new TextDecoder().decode(data)
+          : typeof data === 'string'
+            ? data
+            : data
+              ? JSON.stringify(data)
+              : '';
+    } catch (decodeError) {
+      bodyText = '';
+    }
+    let detail = bodyText;
+    try {
+      const parsed = bodyText ? JSON.parse(bodyText) : null;
+      if (parsed && parsed.detail) {
+        detail =
+          typeof parsed.detail === 'string'
+            ? parsed.detail
+            : JSON.stringify(parsed.detail);
+      }
+    } catch (parseError) {
+      // Body wasn't JSON - bodyText (the raw decoded text) is still useful
+      // as-is, keep it.
+    }
+    const prefix = `${status}${statusText ? ' ' + statusText : ''}`;
+    return detail ? `${prefix}: ${detail.slice(0, 300)}` : prefix;
+  }
+  // No response at all - a network failure, timeout, or a plain JS
+  // exception thrown locally (e.g. failing to parse a malformed response).
+  if (err.message) {
+    return err.code ? `${err.code}: ${err.message}` : err.message;
+  }
+  return typeof err === 'string' ? err : JSON.stringify(err);
+}
+
 export class CookieUtils {
   static setCookie(name, value, exp_y, exp_m, exp_d, path, domain, secure) {
     let cookie_string = name + '=' + escape(value);
@@ -150,4 +204,5 @@ export {
   hexToRgb,
   getLabelColor,
   hideNotification,
+  describeError,
 };

@@ -19,7 +19,7 @@ import SemiSegmentation from './actions/SemiSegmentation';
 import ClassPrompts from './actions/ClassPrompts';
 import ActiveLearning from './actions/ActiveLearning';
 import MonaiLabelClient from '../services/MonaiLabelClient';
-import { hideNotification, getLabelColor } from '../utils/GenericUtils';
+import { hideNotification, getLabelColor, describeError } from '../utils/GenericUtils';
 import { Enums } from '@cornerstonejs/tools';
 import { cache, triggerEvent, eventTarget } from '@cornerstonejs/core';
 import SegmentationReader from '../utils/SegmentationReader';
@@ -118,18 +118,19 @@ export default class MonaiLabelPanel extends Component<any, any> {
 
     this.serverURI = serverURI;
     const response = await this.client().info();
-    console.log(response.data);
 
     hideNotification(nid, this.notification);
     if (response.status !== 200) {
+      console.error('Failed to connect to MONAI Label', response);
       this.notification.show({
         title: 'MONAI Label',
-        message: 'Failed to Connect to MONAI Label',
+        message: `Failed to connect to MONAI Label: ${describeError(response)}`,
         type: 'error',
-        duration: 5000,
+        duration: 8000,
       });
       return;
     }
+    console.log(response.data);
 
     this.notification.show({
       title: 'MONAI Label',

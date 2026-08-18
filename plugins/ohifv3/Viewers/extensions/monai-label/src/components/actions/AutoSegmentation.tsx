@@ -15,7 +15,7 @@ import React from 'react';
 import { cache } from '@cornerstonejs/core';
 import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
-import { hideNotification, getLabelColor } from '../../utils/GenericUtils';
+import { hideNotification, getLabelColor, describeError } from '../../utils/GenericUtils';
 
 export default class AutoSegmentation extends BaseTab {
   modelSelector: any;
@@ -143,11 +143,12 @@ export default class AutoSegmentation extends BaseTab {
 
       hideNotification(nid, this.notification);
       if (response.status !== 200) {
+        console.error('Auto-Segmentation inference failed', response);
         this.notification.show({
           title: 'MONAI Label - ' + model,
-          message: 'Failed to Run Segmentation',
+          message: `Segmentation failed: ${describeError(response)}`,
           type: 'error',
-          duration: 6000,
+          duration: 8000,
         });
         return;
       }
@@ -165,9 +166,9 @@ export default class AutoSegmentation extends BaseTab {
       hideNotification(nid, this.notification);
       this.notification.show({
         title: 'MONAI Label - ' + model,
-        message: 'Failed to Run Segmentation',
+        message: `Segmentation failed: ${describeError(e)}`,
         type: 'error',
-        duration: 6000,
+        duration: 8000,
       });
     } finally {
       this.props.setBusy(false);

@@ -15,6 +15,7 @@ import React from 'react';
 
 import BaseTab from './BaseTab';
 import NextSampleForm from './NextSampleForm';
+import { describeError } from '../../utils/GenericUtils';
 
 export default class OptionTable extends BaseTab {
   constructor(props) {
@@ -50,11 +51,12 @@ export default class OptionTable extends BaseTab {
     }
 
     if (response.status !== 200) {
+      console.error('Failed to fetch next sample', response);
       this.notification.show({
         title: 'MONAI Label',
-        message: 'Failed to Fetch Next Sample',
+        message: `Failed to fetch next sample: ${describeError(response)}`,
         type: 'error',
-        duration: 5000,
+        duration: 8000,
       });
     } else {
       this.uiModelService.show({
@@ -80,11 +82,12 @@ export default class OptionTable extends BaseTab {
       : await this.props.client().run_train(params);
 
     if (response.status !== 200) {
+      console.error('Failed to ' + (training ? 'stop' : 'run') + ' training', response);
       this.notification.show({
         title: 'MONAI Label',
-        message: 'Failed to ' + (training ? 'STOP' : 'RUN') + ' training',
+        message: `Failed to ${training ? 'STOP' : 'RUN'} training: ${describeError(response)}`,
         type: 'error',
-        duration: 5000,
+        duration: 8000,
       });
     } else {
       this.notification.show({

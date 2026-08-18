@@ -14,7 +14,7 @@ limitations under the License.
 import React from 'react';
 import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
-import { hideNotification } from '../../utils/GenericUtils';
+import { hideNotification, describeError } from '../../utils/GenericUtils';
 
 export default class ClassPrompts extends BaseTab {
   modelSelector: any;
@@ -138,13 +138,13 @@ export default class ClassPrompts extends BaseTab {
 
       hideNotification(nid, this.notification);
       if (response.status !== 200) {
+        console.error('Class-based inference failed', response);
         this.notification.show({
           title: 'MONAI Label',
-          message: 'Failed to Run Class Based Inference',
+          message: `Class Based Inference failed: ${describeError(response)}`,
           type: 'error',
-          duration: 6000,
+          duration: 8000,
         });
-        console.log(response.data);
         return;
       }
 
@@ -161,9 +161,9 @@ export default class ClassPrompts extends BaseTab {
       hideNotification(nid, this.notification);
       this.notification.show({
         title: 'MONAI Label',
-        message: 'Failed to Run Class Based Inference',
+        message: `Class Based Inference failed: ${describeError(e)}`,
         type: 'error',
-        duration: 6000,
+        duration: 8000,
       });
     } finally {
       this.props.setBusy(false);
