@@ -13,6 +13,8 @@ limitations under the License.
 
 import { Component } from 'react';
 import PropTypes from 'prop-types';
+import { eventTarget } from '@cornerstonejs/core';
+import { Enums as CornerstoneToolsEnums } from '@cornerstonejs/tools';
 
 import './BaseTab.css';
 import { UIModalService, UINotificationService } from '@ohif/core';
@@ -36,6 +38,7 @@ export default class BaseTab extends Component {
   notification: any;
   uiModelService: any;
   tabId: string;
+  private segmentInfoPoll: ReturnType<typeof setInterval> | null = null;
 
   constructor(props) {
     super(props);
@@ -43,6 +46,50 @@ export default class BaseTab extends Component {
     this.uiModelService = new UIModalService();
     this.tabId = 'tab-' + this.props.tabIndex;
   }
+
+  // Whichever tab is shown by default at panel load (currently
+  // Auto-Segmentation) can render its very first pass before segments
+  // finish being registered/colored - segmentInfo() would then return {}
+  // forever after, since nothing about this component's own props/state
+  // ever changes again to trigger a re-render. Re-rendering whenever
+  // cornerstone3D reports the segmentation's metadata (segment list,
+  // colors, labels) changed picks up real colors as soon as they exist,
+  // regardless of which tab happened to render first.
+  componentDidMount() {
+    eventTarget.addEventListener(
+      CornerstoneToolsEnums.Events.SEGMENTATION_MODIFIED,
+      this.onSegmentationMetadataModified
+    );
+    // Belt-and-suspenders: rather than betting everything on that one
+    // event firing at exactly the right moment (initial segment/color
+    // setup could go through a different path than later edits do), just
+    // re-render a few times shortly after mount regardless. Cheap, bounded,
+    // and self-cancels once it's had its chance.
+    let attempts = 0;
+    this.segmentInfoPoll = setInterval(() => {
+      attempts += 1;
+      this.forceUpdate();
+      if (attempts >= 10 && this.segmentInfoPoll) {
+        clearInterval(this.segmentInfoPoll);
+        this.segmentInfoPoll = null;
+      }
+    }, 300);
+  }
+
+  componentWillUnmount() {
+    eventTarget.removeEventListener(
+      CornerstoneToolsEnums.Events.SEGMENTATION_MODIFIED,
+      this.onSegmentationMetadataModified
+    );
+    if (this.segmentInfoPoll) {
+      clearInterval(this.segmentInfoPoll);
+      this.segmentInfoPoll = null;
+    }
+  }
+
+  onSegmentationMetadataModified = () => {
+    this.forceUpdate();
+  };
 
   onSelectActionTab = (evt) => {
     this.props.onSelectActionTab(evt.currentTarget.value);
@@ -56,8 +103,12 @@ export default class BaseTab extends Component {
   onSelectModel = (model) => {};
 
   segmentInfo = () => {
-    return currentSegmentsInfo(
-      this.props.servicesManager.services.segmentationService
-    ).info;
+    // servicesManager can be momentarily undefined on an early/transient
+    // render (e.g. right after a hot reload, before the panel has finished
+    // wiring props down) - render()s that call this unconditionally
+    // (AutoSegmentation/SemiSegmentation/ClassPrompts) shouldn't crash the
+    // whole tab over it, just show no colors yet until the next render.
+    const segmentationService = this.props.servicesManager?.services?.segmentationService;
+    return segmentationService ? currentSegmentsInfo(segmentationService).info : {};
   };
 }

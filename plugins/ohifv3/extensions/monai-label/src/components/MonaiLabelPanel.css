@@ -135,28 +135,110 @@ limitations under the License.
 }
 .monaiLabelPanel .annotationToolRow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
   margin: 6px 0;
 }
 .monaiLabelPanel .annotationToolButton {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border: 1px solid #000;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
   border-radius: 4px;
-  color: #000;
-  font-size: 11px;
-  padding: 4px 8px;
+  background: transparent;
+  color: #fff;
   outline: none;
   cursor: pointer;
-  flex: 1 1 auto;
 }
 .monaiLabelPanel .annotationToolButton svg {
   flex-shrink: 0;
 }
 .monaiLabelPanel .annotationToolButton:hover {
-  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.15);
+}
+.monaiLabelPanel .annotationToolButton.active {
+  background: #00a4d9;
+}
+.monaiLabelPanel .excludeToolButton {
+  color: rgb(255, 60, 60);
+}
+.monaiLabelPanel .excludeToolButton.active {
+  background: rgb(255, 60, 60);
+  color: #fff;
+}
+.monaiLabelPanel .annotationToolDivider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+}
+.monaiLabelPanel .brushSizeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.monaiLabelPanel .brushSizeRow .brushSizeLabel {
+  flex-shrink: 0;
+  color: #9ccff0;
+}
+/* Custom track + thumb, since the default browser rendering (no visible
+   knob, unstyled flat bar) doesn't match the rest of this panel's look.
+   The filled portion up to the current value is drawn with a plain
+   left-to-right gradient (via the --pct custom property, set inline from
+   the current value) rather than relying on ::-moz-range-progress/
+   accent-color alone, so the fill renders consistently across engines. */
+.monaiLabelPanel .brushSizeRow input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    #00a4d9 var(--pct, 50%),
+    rgba(255, 255, 255, 0.2) var(--pct, 50%)
+  );
+  outline: none;
+  cursor: pointer;
+  accent-color: #00a4d9;
+}
+.monaiLabelPanel .brushSizeRow input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #00a4d9;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.monaiLabelPanel .brushSizeRow input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #00a4d9;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.monaiLabelPanel .brushSizeRow input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: transparent;
+}
+.monaiLabelPanel .brushSizeRow .brushSizeValue {
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: right;
+  font-family: monospace;
+  color: #fff;
 }
 .monaiLabelPanel .tabLabelText {
   display: inline-flex;

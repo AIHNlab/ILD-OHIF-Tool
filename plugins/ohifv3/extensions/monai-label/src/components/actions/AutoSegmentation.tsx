@@ -15,7 +15,7 @@ import React from 'react';
 import { cache } from '@cornerstonejs/core';
 import ModelSelector from '../ModelSelector';
 import BaseTab from './BaseTab';
-import { hideNotification } from '../../utils/GenericUtils';
+import { hideNotification, getLabelColor } from '../../utils/GenericUtils';
 
 export default class AutoSegmentation extends BaseTab {
   modelSelector: any;
@@ -43,6 +43,23 @@ export default class AutoSegmentation extends BaseTab {
         info.data.models[m].type === 'vista3d'
     );
     return models;
+  }
+
+  getModelLabels(model) {
+    const { info } = this.props;
+    const names = (model && info.modelLabelNames[model]) || [];
+    return names.filter((name) => name !== 'background');
+  }
+
+  // Unlike segmentInfo() (the live registry, empty until a class has
+  // actually been segmented at least once), getLabelColor is a pure
+  // function of the label name - the same one MonaiLabelPanel uses to
+  // assign each class's color in the first place, so this shows the real
+  // eventual color for every class immediately, with nothing needing to
+  // have run yet.
+  segColorToRgb(label) {
+    const { r, g, b } = getLabelColor(label);
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   onSegmentation = async () => {
@@ -113,35 +130,59 @@ export default class AutoSegmentation extends BaseTab {
     }
 
     this.props.setBusy(true);
-    const response = await this.props
-      .client()
-      .infer(model, displaySet.SeriesInstanceUID, params);
-    this.props.setBusy(false);
-    // console.log(response);
+    // Wrapped so a thrown exception (e.g. updateView failing to parse a
+    // malformed/error response body) can't skip setBusy(false) - without
+    // this, the Run button (disabled while setBusy is true - see
+    // ModelSelector's buttonDisabled) and busy spinner would stay stuck
+    // forever even though the backend request itself already finished.
+    try {
+      const response = await this.props
+        .client()
+        .infer(model, displaySet.SeriesInstanceUID, params);
+      // console.log(response);
 
-    hideNotification(nid, this.notification);
-    if (response.status !== 200) {
+      hideNotification(nid, this.notification);
+      if (response.status !== 200) {
+        this.notification.show({
+          title: 'MONAI Label - ' + model,
+          message: 'Failed to Run Segmentation',
+          type: 'error',
+          duration: 6000,
+        });
+        return;
+      }
+
+      this.notification.show({
+        title: 'MONAI Label - ' + model,
+        message: 'Running Segmentation - Successful',
+        type: 'success',
+        duration: 4000,
+      });
+
+      this.props.updateView(response, model, label_names);
+    } catch (e) {
+      console.error('Auto-Segmentation inference failed', e);
+      hideNotification(nid, this.notification);
       this.notification.show({
         title: 'MONAI Label - ' + model,
         message: 'Failed to Run Segmentation',
         type: 'error',
         duration: 6000,
       });
-      return;
+    } finally {
+      this.props.setBusy(false);
     }
-
-    this.notification.show({
-      title: 'MONAI Label - ' + model,
-      message: 'Running Segmentation - Successful',
-      type: 'success',
-      duration: 4000,
-    });
-
-    this.props.updateView(response, model, label_names);
   };
 
   render() {
     const models = this.getModels();
+    // ModelSelector defaults to the first model until the user changes it
+    // without telling this component - mirror that default here too, same
+    // as SemiSegmentation.tsx does, so the class list matches what Run
+    // will actually use.
+    const model = this.state.currentModel || models[0] || null;
+    const labels = this.getModelLabels(model);
+
     return (
       <div className="tab">
         <input
@@ -180,6 +221,32 @@ export default class AutoSegmentation extends BaseTab {
               </div>
             }
           />
+          {labels.length > 0 && (
+            <div className="optionsTableContainer">
+              <hr />
+              <p>Classes:</p>
+              <hr />
+              <div className="bodyTableContainer">
+                <table className="optionsTable">
+                  <tbody>
+                    {labels.map((label) => (
+                      <tr key={label}>
+                        <td>
+                          <span
+                            className="segColor"
+                            style={{
+                              backgroundColor: this.segColorToRgb(label),
+                            }}
+                          />
+                        </td>
+                        <td>{label}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

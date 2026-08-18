@@ -25,6 +25,10 @@ function createTools(utilityModule) {
         parentTool: 'Brush',
         configuration: {
           activeStrategy: 'FILL_INSIDE_CIRCLE',
+          // Default (25) is a 50mm-diameter circle - way too coarse for
+          // picking out a small lesion/pattern on a CT slice. 5 gives a
+          // 10mm-diameter circle, small enough for precise touch-ups.
+          brushSize: 5,
         },
       },
       {
@@ -32,6 +36,7 @@ function createTools(utilityModule) {
         parentTool: 'Brush',
         configuration: {
           activeStrategy: 'ERASE_INSIDE_CIRCLE',
+          brushSize: 5,
         },
       },
       {
@@ -90,8 +95,11 @@ function createTools(utilityModule) {
 
       { toolName: toolNames.UltrasoundDirectional },
       { toolName: 'ProbeMONAILabel' },
+      { toolName: 'ProbeMONAILabelExclude' },
       { toolName: toolNames.RectangleROI },
-      { toolName: toolNames.PlanarFreehandROI }
+      { toolName: toolNames.PlanarFreehandROI },
+      { toolName: 'RectangleROIExclude' },
+      { toolName: 'PlanarFreehandROIExclude' }
     ],
     disabled: [{ toolName: toolNames.ReferenceLines }, { toolName: toolNames.AdvancedMagnify }],
   };

@@ -564,4 +564,15 @@ export const GenericAnatomyColors = [
   { label: 'region 15', value: rgbToHex(157, 0, 0) },
   { label: 'unknown', value: rgbToHex(100, 100, 130) },
   { label: 'cyst', value: rgbToHex(205, 205, 100) },
+  // ILD pattern labels (nnunet_ild / sam2_ild) - explicit, mutually distinct
+  // colors instead of the hash-based fallback below, which happened to
+  // produce several near-duplicate colors for these particular label names.
+  { label: 'healthy', value: rgbToHex(76, 175, 80) },
+  { label: 'ggo', value: rgbToHex(255, 235, 59) },
+  { label: 'reticulation', value: rgbToHex(233, 30, 99) },
+  { label: 'consolidation', value: rgbToHex(244, 67, 54) },
+  { label: 'honeycombing', value: rgbToHex(255, 152, 0) },
+  { label: 'reticulation_ggo', value: rgbToHex(0, 188, 212) },
+  { label: 'bronchiectasis', value: rgbToHex(33, 150, 243) },
+  { label: 'emphysema', value: rgbToHex(156, 39, 176) },
 ];

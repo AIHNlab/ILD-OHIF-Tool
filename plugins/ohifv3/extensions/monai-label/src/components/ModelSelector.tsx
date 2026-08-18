@@ -111,7 +111,7 @@ export default class ModelSelector extends Component {
                   onClick={this.onClickBtn}
                   title={'Run ' + this.props.title}
                   disabled={
-                    this.state.isButtonDisabled || !this.props.models.length
+                    this.state.buttonDisabled || !this.props.models.length
                   }
                   style={{ display: this.props.onClick ? 'block' : 'none' }}
                 >

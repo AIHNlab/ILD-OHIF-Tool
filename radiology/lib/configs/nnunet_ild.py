@@ -11,14 +11,14 @@ class NNUNetILD(TaskConfig):
             "emphysema": 8,
         }
         self.label_colors = {
-            "healthy":          [128, 174, 128],   # muted green
-            "ggo":              [241, 214, 145],    # pale yellow
-            "reticulation":     [177,  122, 101],   # brown
-            "consolidation":    [216, 101,  79],    # red-orange
-            "honeycombing":     [221, 130, 101],    # salmon
-            "reticulation_ggo": [144, 238, 144],    # light green
-            "bronchiectasis":   [ 78, 171, 250],    # blue
-            "emphysema":        [192, 104, 191],    # purple
+            "healthy":          [ 76, 175,  80],   # green
+            "ggo":              [255, 235,  59],   # yellow
+            "reticulation":     [233,  30,  99],   # pink
+            "consolidation":    [244,  67,  54],   # red
+            "honeycombing":     [255, 152,   0],   # orange
+            "reticulation_ggo": [  0, 188, 212],   # cyan
+            "bronchiectasis":   [ 33, 150, 243],   # blue
+            "emphysema":        [156,  39, 176],   # purple
         }
         self.model_folder = os.path.join(
             model_dir, "nnUNet_results/Dataset003_ILD_raw/nnUNetTrainer__nnUNetPlans__3d_fullres")

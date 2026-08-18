@@ -11,14 +11,14 @@ class SAM2ILD(TaskConfig):
             "emphysema": 8,
         }
         self.label_colors = {
-            "healthy":          [128, 174, 128],
-            "ggo":              [241, 214, 145],
-            "reticulation":     [177,  122, 101],
-            "consolidation":    [216, 101,  79],
-            "honeycombing":     [221, 130, 101],
-            "reticulation_ggo": [144, 238, 144],
-            "bronchiectasis":   [ 78, 171, 250],
-            "emphysema":        [192, 104, 191],
+            "healthy":          [ 76, 175,  80],   # green
+            "ggo":              [255, 235,  59],   # yellow
+            "reticulation":     [233,  30,  99],   # pink
+            "consolidation":    [244,  67,  54],   # red
+            "honeycombing":     [255, 152,   0],   # orange
+            "reticulation_ggo": [  0, 188, 212],   # cyan
+            "bronchiectasis":   [ 33, 150, 243],   # blue
+            "emphysema":        [156,  39, 176],   # purple
         }
         self.checkpoint_path = os.path.join(model_dir, "sam2/checkpoint_ild.pt")
 

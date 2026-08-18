@@ -15,14 +15,19 @@ import { ProbeTool, annotation, drawing } from '@cornerstonejs/tools';
 
 const { getAnnotations } = annotation.state;
 
-export default class ProbeMONAILabelTool extends ProbeTool {
-  static toolName = 'ProbeMONAILabel';
+// Negative/exclude point - placed alongside a box, freehand, or point prompt
+// to carve that spot back out of the resulting segmentation, instead of
+// marking where the finding is. A separate tool (not a modifier on
+// ProbeMONAILabel) so both kinds can coexist and be told apart on screen -
+// red here vs. ProbeMONAILabelTool's default color for "include" points.
+export default class ProbeMONAILabelExcludeTool extends ProbeTool {
+  static toolName = 'ProbeMONAILabelExclude';
 
   constructor(
     toolProps = {},
     defaultToolProps = {
       configuration: {
-        customColor: undefined,
+        customColor: 'rgb(255, 60, 60)',
       },
     }
   ) {

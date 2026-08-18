@@ -27,3 +27,10 @@
 # sam2.1_hiera_t512.yaml (and siblings, if needed) from that repo path into
 # site-packages/sam2/configs/ by hand.
 MedSAM2 @ git+https://github.com/bowang-lab/MedSAM2.git@332f30d420f1d1b08e2a79b3ae6a602458808383 ; python_version >= '3.10'
+
+# sam2_interactive.py uses skimage.segmentation.random_walker directly (point
+# prompts: graph-based region growing from click seeds) - already present
+# transitively via nnunetv2 in this env, listed explicitly since it's a real
+# direct dependency now.
+scikit-image
+

@@ -16,8 +16,6 @@ import PropTypes from 'prop-types';
 import './MonaiLabelPanel.css';
 import AutoSegmentation from './actions/AutoSegmentation';
 import SemiSegmentation from './actions/SemiSegmentation';
-import PointPrompts from './actions/PointPrompts';
-import ROIPrompts from './actions/ROIPrompts';
 import ClassPrompts from './actions/ClassPrompts';
 import ActiveLearning from './actions/ActiveLearning';
 import MonaiLabelClient from '../services/MonaiLabelClient';
@@ -43,8 +41,6 @@ export default class MonaiLabelPanel extends Component<any, any> {
     activelearning: any;
     segmentation: any;
     semisegmentation: any;
-    pointprompts: any;
-    roiprompts: any;
     classprompts: any;
   };
   serverURI = 'http://127.0.0.1:8000';
@@ -59,8 +55,6 @@ export default class MonaiLabelPanel extends Component<any, any> {
       activelearning: React.createRef(),
       segmentation: React.createRef(),
       semisegmentation: React.createRef(),
-      pointprompts: React.createRef(),
-      roiprompts: React.createRef(),
       classprompts: React.createRef(),
     };
 
@@ -281,7 +275,28 @@ export default class MonaiLabelPanel extends Component<any, any> {
     labels,
     override = false,
     label_class_unknown = false,
-    sidx = -1
+    sidx = -1,
+    // {xmin, ymin, xmax, ymax} in voxel-index space, all slices - restricts
+    // the override merge below to this in-plane box. Without it, "preserve
+    // other classes" only compares label VALUES, not location: a second,
+    // spatially unrelated run whose result happens to contain the same
+    // class value anywhere wipes every voxel with that value everywhere,
+    // including an earlier, disjoint ROI's result.
+    xyBounds = null,
+    // 'add' (default): merge response voxels in as this class, and, within
+    // xyBounds, also let the model correct/replace whatever's already
+    // there (used by the point/rectangle/freehand ROI prompts, where the
+    // whole point is "redo this region"). 'remove': the response is a
+    // propagated brush-erase mask (see SemiSegmentation.tsx's
+    // buildBrushParamsList) - wherever it's nonzero, clear that voxel
+    // instead of writing it, and only if it's currently this same class.
+    // 'add-brush': the response is a propagated brush-PAINT mask - only
+    // write voxels where it's nonzero, and never clear anything else in
+    // xyBounds. Unlike plain 'add', a brush stroke is already a deliberate,
+    // correct edit - the propagation's job is purely to extend it to other
+    // slices, not to let SAM2's padded margin "correct" existing,
+    // untouched same-class mask nearby.
+    mode = 'add'
   ) => {
     console.log('UpdateView: ', {
       model_id,
@@ -289,6 +304,8 @@ export default class MonaiLabelPanel extends Component<any, any> {
       override,
       label_class_unknown,
       sidx,
+      xyBounds,
+      mode,
     });
     const ret = SegmentationReader.parseNrrdData(response.data);
     if (!ret) {
@@ -354,26 +371,136 @@ export default class MonaiLabelPanel extends Component<any, any> {
         const currentSegArray = new Uint8Array(scalarData.length);
         currentSegArray.set(scalarData);
 
-        // get unique values to determine which organs to update, keep rest
-        const updateTargets = new Set(convertedData);
         const numImageFrames =
           this.getActiveViewportInfo().displaySet.numImageFrames;
         const sliceLength = scalarData.length / numImageFrames;
         const sliceBegin = sliceLength * sidx;
         const sliceEnd = sliceBegin + sliceLength;
+        const [width] = volumeLoadObject.dimensions || [];
+        console.log('xyBounds merge check: ', { xyBounds, mode, dimensions: volumeLoadObject.dimensions, width });
 
-        for (let i = 0; i < convertedData.length; i++) {
-          if (sidx >= 0 && (i < sliceBegin || i >= sliceEnd)) {
-            continue;
+        // xyBounds.zmin/zmax (SAM2 runs only - see SemiSegmentation.tsx's
+        // SAM2_MAX_FRAMES_TO_TRACK) restrict the merge to the slice range
+        // that model actually tracked. Without this, a voxel on some
+        // unrelated slice that just happens to share this run's (x,y) box
+        // reads as "the model decided 0 here" and gets overwritten, when
+        // really the model never looked at that slice at all - its result
+        // array there is just a zero-filled placeholder.
+        const isOutsideBounds = (i) => {
+          if (!xyBounds || !width) {
+            return false;
           }
+          const local = i % sliceLength;
+          const x = local % width;
+          const y = Math.floor(local / width);
+          const frameIdx = Math.floor(i / sliceLength);
+          return (
+            x < xyBounds.xmin ||
+            x > xyBounds.xmax ||
+            y < xyBounds.ymin ||
+            y > xyBounds.ymax ||
+            (xyBounds.zmin != null && frameIdx < xyBounds.zmin) ||
+            (xyBounds.zmax != null && frameIdx > xyBounds.zmax)
+          );
+        };
 
-          if (
-            convertedData[i] !== 255 &&
-            updateTargets.has(currentSegArray[i])
-          ) {
-            currentSegArray[i] = convertedData[i];
+        if (mode === 'remove') {
+          // Brush-erase propagation: convertedData is nonzero wherever the
+          // model tracked the erased region onto this slice. Clear exactly
+          // those voxels, and only if they're currently this same class -
+          // every other in-bounds voxel (untracked, or a different class)
+          // is left untouched. This deliberately doesn't reuse the 'add'
+          // merge below: that treats "response says 0 here" as "write 0",
+          // which for a remove-propagated mask would wipe every unrelated
+          // 0/background voxel in the whole padded box instead of just the
+          // specific tracked region.
+          let cleared = 0;
+          for (let i = 0; i < convertedData.length; i++) {
+            if (sidx >= 0 && (i < sliceBegin || i >= sliceEnd)) {
+              continue;
+            }
+            if (isOutsideBounds(i)) {
+              continue;
+            }
+            if (convertedData[i] !== 0 && currentSegArray[i] === convertedData[i]) {
+              currentSegArray[i] = 0;
+              cleared++;
+            }
           }
+          console.log('remove-mode merge: ', { cleared });
+        } else if (mode === 'add-brush') {
+          // Brush-add propagation: convertedData is nonzero wherever the
+          // model tracked the newly painted region onto this slice. Only
+          // ADD those voxels in as this class - never clear anything to 0,
+          // unlike the plain 'add' branch below, which treats "response
+          // says 0 here" as "write 0" (correcting the box). That's right
+          // for a fresh ROI prompt, but here it would wipe out unrelated,
+          // untouched same-class mask that just happens to fall inside the
+          // padded margin/z-range around the brush stroke.
+          let added = 0;
+          for (let i = 0; i < convertedData.length; i++) {
+            if (sidx >= 0 && (i < sliceBegin || i >= sliceEnd)) {
+              continue;
+            }
+            if (isOutsideBounds(i)) {
+              continue;
+            }
+            if (convertedData[i] !== 0) {
+              currentSegArray[i] = convertedData[i];
+              added++;
+            }
+          }
+          console.log('add-brush merge: ', { added });
+        } else {
+          // get unique values to determine which organs to update, keep rest
+          const updateTargets = new Set(convertedData);
+
+          let nonZeroOutsideBefore = 0;
+          if (xyBounds && width) {
+            for (let i = 0; i < scalarData.length; i++) {
+              if (scalarData[i] === 0) continue;
+              if (isOutsideBounds(i)) {
+                nonZeroOutsideBefore++;
+              }
+            }
+          }
+          window.__debugOverwrites = 0;
+
+          for (let i = 0; i < convertedData.length; i++) {
+            if (sidx >= 0 && (i < sliceBegin || i >= sliceEnd)) {
+              continue;
+            }
+
+            if (isOutsideBounds(i)) {
+              continue;
+            }
+
+            if (
+              convertedData[i] !== 255 &&
+              updateTargets.has(currentSegArray[i])
+            ) {
+              if (currentSegArray[i] !== 0) {
+                window.__debugOverwrites = (window.__debugOverwrites || 0) + 1;
+              }
+              currentSegArray[i] = convertedData[i];
+            }
+          }
+          let nonZeroOutsideAfter = 0;
+          if (xyBounds && width) {
+            for (let i = 0; i < currentSegArray.length; i++) {
+              if (currentSegArray[i] === 0) continue;
+              if (isOutsideBounds(i)) {
+                nonZeroOutsideAfter++;
+              }
+            }
+          }
+          console.log('outside-xyBounds preservation check: ', {
+            nonZeroOutsideBefore,
+            nonZeroOutsideAfter,
+            overwritesInsideBounds: window.__debugOverwrites,
+          });
         }
+
         convertedData = currentSegArray;
       }
       const { voxelManager } = volumeLoadObject;
@@ -414,6 +541,23 @@ export default class MonaiLabelPanel extends Component<any, any> {
 
   onOptionsConfig = () => {
     return this.state.options;
+  };
+
+  resetSegmentation = () => {
+    const { segmentationService } = this.props.servicesManager.services;
+    const volumeLoadObject = segmentationService.getLabelmapVolume('1');
+    if (!volumeLoadObject) {
+      return;
+    }
+    const { voxelManager } = volumeLoadObject;
+    const scalarData = voxelManager?.getCompleteScalarDataArray();
+    if (!scalarData) {
+      return;
+    }
+    voxelManager.setCompleteScalarDataArray(new Uint8Array(scalarData.length));
+    triggerEvent(eventTarget, Enums.Events.SEGMENTATION_DATA_MODIFIED, {
+      segmentationId: '1',
+    });
   };
 
   render() {
@@ -473,38 +617,11 @@ export default class MonaiLabelPanel extends Component<any, any> {
               getActiveViewportInfo={this.getActiveViewportInfo}
               servicesManager={this.props.servicesManager}
               commandsManager={this.props.commandsManager}
-            />
-            <PointPrompts
-              ref={this.actions['pointprompts']}
-              tabIndex={4}
-              info={this.state.info}
-              client={this.client}
-              updateView={this.updateView}
-              setBusy={(busy: boolean) => this.setBusy('pointprompts', busy)}
-              isBusy={!!this.state.busyActions['pointprompts']}
-              onSelectActionTab={this.onSelectActionTab}
-              onOptionsConfig={this.onOptionsConfig}
-              getActiveViewportInfo={this.getActiveViewportInfo}
-              servicesManager={this.props.servicesManager}
-              commandsManager={this.props.commandsManager}
-            />
-            <ROIPrompts
-              ref={this.actions['roiprompts']}
-              tabIndex={5}
-              info={this.state.info}
-              client={this.client}
-              updateView={this.updateView}
-              setBusy={(busy: boolean) => this.setBusy('roiprompts', busy)}
-              isBusy={!!this.state.busyActions['roiprompts']}
-              onSelectActionTab={this.onSelectActionTab}
-              onOptionsConfig={this.onOptionsConfig}
-              getActiveViewportInfo={this.getActiveViewportInfo}
-              servicesManager={this.props.servicesManager}
-              commandsManager={this.props.commandsManager}
+              resetSegmentation={this.resetSegmentation}
             />
             <ClassPrompts
               ref={this.actions['classprompts']}
-              tabIndex={6}
+              tabIndex={4}
               info={this.state.info}
               client={this.client}
               updateView={this.updateView}

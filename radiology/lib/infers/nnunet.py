@@ -1,13 +1,18 @@
 import os, glob, shutil, tempfile, torch
 from monailabel.interfaces.tasks.infer_v2 import InferType
 from monailabel.tasks.infer.basic_infer import BasicInferTask
+from lib.infers.prompt_utils import normalize_ct, bbox_mask, polygon_mask, point_outline, exclude_region_mask
 
-# extra slices of through-plane context to keep around a drawn ROI's slice,
-# since nnU-Net's 3d_fullres inference needs a real 3D volume, not one slice
-Z_MARGIN = 32
 # floor on the in-plane crop size so a tiny drawn box still gives nnU-Net
 # enough context to run its sliding-window inference meaningfully
 XY_MIN_SIZE = 96
+
+# same idea, through-plane, for a point prompt's z window (see _roi_to_bbox's
+# full_depth=False path) - must match SemiSegmentation.tsx's
+# POINT_Z_MARGIN (that's HALF this value, applied on each side of the
+# point's own slice) so the frontend's merge never treats a slice nnU-Net
+# never actually looked at as "genuinely decided background" there.
+Z_MIN_SIZE = 64
 
 class NNUNet(BasicInferTask):
     def __init__(self, model_folder, labels, label_colors=None, folds=(0,),
@@ -35,12 +40,11 @@ class NNUNet(BasicInferTask):
     def post_transforms(self, data=None):
         return []
 
-    def _roi_to_bbox(self, roi, shape):
+    def _roi_to_bbox(self, roi, shape, full_depth=True):
         x0, y0, z0 = roi["start"]
-        x1, y1, _ = roi["end"]
+        x1, y1, z1 = roi["end"]
         xmin, xmax = sorted((int(x0), int(x1)))
         ymin, ymax = sorted((int(y0), int(y1)))
-        z = int(z0)
 
         # pad in-plane box up to XY_MIN_SIZE, centered on the drawn box
         if xmax - xmin < XY_MIN_SIZE:
@@ -52,7 +56,24 @@ class NNUNet(BasicInferTask):
 
         xmin, xmax = max(0, xmin), min(shape[0], xmax)
         ymin, ymax = max(0, ymin), min(shape[1], ymax)
-        zmin, zmax = max(0, z - Z_MARGIN), min(shape[2], z + Z_MARGIN + 1)
+        if full_depth:
+            # a hand-drawn box/freehand outline only specifies an in-plane
+            # region - the finding it's meant to capture can run through the
+            # whole study regardless of how many slices that particular
+            # study has, so z is never restricted
+            zmin, zmax = 0, shape[2]
+        else:
+            # points: roi's z is just the single slice the point-derived
+            # hull/clip was grown on (see __call__'s foreground branch) - a
+            # 2D shape found via local pixel similarity on ONE slice has no
+            # basis for being reapplied to unrelated slices elsewhere in the
+            # study, unlike a shape the user deliberately drew themselves.
+            # Pad up to Z_MIN_SIZE (same centered-padding style as XY above)
+            # instead of cropping to exactly that one slice, so nnU-Net still
+            # gets real neighboring 3D context to classify with.
+            cz = int(z0)  # roi's start/end z are always equal for points
+            zmin, zmax = cz - Z_MIN_SIZE // 2, cz + Z_MIN_SIZE // 2
+            zmin, zmax = max(0, zmin), min(shape[2], zmax)
         return xmin, xmax, ymin, ymax, zmin, zmax
 
     def __call__(self, request, callbacks=None):
@@ -62,15 +83,82 @@ class NNUNet(BasicInferTask):
         in_dir, out_dir = tempfile.mkdtemp(), tempfile.mkdtemp()
 
         roi = request.get("roi")
-        bbox = None
+        mask_polygon = request.get("mask_polygon")  # [[x, y], ...] on one slice
+        roi_slice = request.get("roi_slice")
+        foreground = request.get("foreground")  # [[x, y, z], ...]
+        exclude_shapes = request.get("exclude_shapes")  # [{"type": "point"|"box"|"polygon", ...}, ...]
+        clip = None  # (h, w) mask restricting the final result in-plane, or None
+        # roi/mask_polygon are shapes the user deliberately drew - classify
+        # them through the whole study depth (see _roi_to_bbox). foreground
+        # (points) overrides this to False below: its hull is auto-grown
+        # from local pixel similarity on a single slice, with no basis for
+        # being reapplied to other slices.
+        full_depth = True
+
         orig_nii = None
-        if roi:
+        orig_arr = None
+        if roi or mask_polygon or foreground:
             orig_nii = nib.load(image_path)
-            bbox = self._roi_to_bbox(roi, orig_nii.shape)
+            orig_arr = np.asanyarray(orig_nii.dataobj)  # (X, Y, Z)
+            w, h = orig_arr.shape[0], orig_arr.shape[1]
+
+            if roi:
+                # the caller already gave an exact box - clip to it, since
+                # _roi_to_bbox's XY_MIN_SIZE padding below is just extra
+                # context for nnU-Net's sliding window, not part of the
+                # region the caller actually asked for
+                clip = bbox_mask(w, h, *roi["start"][:2], *roi["end"][:2])
+            elif mask_polygon:
+                xs = [v[0] for v in mask_polygon]
+                ys = [v[1] for v in mask_polygon]
+                z = int(roi_slice)
+                roi = {"start": [min(xs), min(ys), z], "end": [max(xs), max(ys), z]}
+                clip = polygon_mask(mask_polygon, w, h)
+            else:
+                # Points are seeds for one shared outline: region growing
+                # (random_walker) from them respects real tissue similarity
+                # instead of just connecting the clicks geometrically, and
+                # taking the convex hull of whatever it actually grew into
+                # re-encloses that into one smooth, fully-filled shape -
+                # avoiding both a naive straight-edged hull of the raw
+                # clicks AND the scattered/patchy result raw region growing
+                # gives on ILD patterns' noisy internal texture. What's
+                # actually classified inside is still this model's own call.
+                full_depth = False
+                fg = np.array(foreground)
+                z = int(fg[0, 2])
+                img_slice = normalize_ct(orig_arr[:, :, z].T)  # (X,Y) -> (Y,X) = (h,w)
+                hull = point_outline(img_slice, fg[:, :2].tolist(), w, h)
+                if hull is not None:
+                    roi = {
+                        "start": [int(hull[:, 0].min()), int(hull[:, 1].min()), z],
+                        "end": [int(hull[:, 0].max()), int(hull[:, 1].max()), z],
+                    }
+                    clip = polygon_mask(hull.tolist(), w, h)
+                else:
+                    # not enough points yet (or collinear) for an enclosed
+                    # area - fall back to a plain crop around them, nnU-Net's
+                    # own padding (XY_MIN_SIZE) still applies, no further clip
+                    roi = {
+                        "start": [int(fg[:, 0].min()), int(fg[:, 1].min()), z],
+                        "end": [int(fg[:, 0].max()), int(fg[:, 1].max()), z],
+                    }
+                    clip = None
+
+            if exclude_shapes:
+                # nnU-Net is a plain classifier - it has no prompt input to
+                # feed a negative region into, so excluding one is only
+                # possible after the fact: carve it out of whatever clip
+                # (or full result, if there was none) applies.
+                ex_mask = exclude_region_mask(w, h, exclude_shapes)
+                clip = ex_mask if clip is None else (clip & ex_mask)
+
+        bbox = None
+        if roi:
+            bbox = self._roi_to_bbox(roi, orig_nii.shape, full_depth=full_depth)
             xmin, xmax, ymin, ymax, zmin, zmax = bbox
             log.info(f"NNUNET ROI crop: x[{xmin}:{xmax}] y[{ymin}:{ymax}] z[{zmin}:{zmax}]")
 
-            orig_arr = np.asanyarray(orig_nii.dataobj)
             crop_arr = orig_arr[xmin:xmax, ymin:ymax, zmin:zmax]
 
             crop_affine = orig_nii.affine.copy()
@@ -93,12 +181,18 @@ class NNUNet(BasicInferTask):
             xmin, xmax, ymin, ymax, zmin, zmax = bbox
             pred_nii = nib.load(result)
             pred_arr = np.asanyarray(pred_nii.dataobj).astype(np.uint8)
-            nii = orig_nii
             arr = np.zeros(orig_nii.shape, dtype=np.uint8)
             arr[xmin:xmax, ymin:ymax, zmin:zmax] = pred_arr
         else:
             nii   = nib.load(result)
             arr   = np.asanyarray(nii.dataobj).astype(np.uint8)
+
+        if clip is not None:
+            # clip is (h, w) = (y, x); arr is (x, y, z) - transpose to (x, y)
+            # and broadcast over z, so freehand/point regions land exactly on
+            # the drawn/grown shape instead of nnU-Net's padded rectangular
+            # crop around it
+            arr *= clip.T[:, :, None]
 
         log.info(f"NNUNET unique labels: {np.unique(arr)}")
 

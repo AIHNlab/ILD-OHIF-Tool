@@ -125,32 +125,49 @@ export default class ClassPrompts extends BaseTab {
     params['label_prompt'] = label_classes;
 
     this.props.setBusy(true);
-    const response = await this.props
-      .client()
-      .infer(model, displaySet.SeriesInstanceUID, params);
-    this.props.setBusy(false);
-    // console.log(response.data);
+    // Wrapped so a thrown exception (e.g. updateView failing to parse a
+    // malformed/error response body) can't skip setBusy(false) - without
+    // this, the Run button (disabled while setBusy is true - see
+    // ModelSelector's buttonDisabled) and busy spinner would stay stuck
+    // forever even though the backend request itself already finished.
+    try {
+      const response = await this.props
+        .client()
+        .infer(model, displaySet.SeriesInstanceUID, params);
+      // console.log(response.data);
 
-    hideNotification(nid, this.notification);
-    if (response.status !== 200) {
+      hideNotification(nid, this.notification);
+      if (response.status !== 200) {
+        this.notification.show({
+          title: 'MONAI Label',
+          message: 'Failed to Run Class Based Inference',
+          type: 'error',
+          duration: 6000,
+        });
+        console.log(response.data);
+        return;
+      }
+
+      this.notification.show({
+        title: 'MONAI Label',
+        message: 'Run Class Based Inference - Successful',
+        type: 'success',
+        duration: 4000,
+      });
+
+      this.props.updateView(response, model, label_names, true);
+    } catch (e) {
+      console.error('Class-based inference failed', e);
+      hideNotification(nid, this.notification);
       this.notification.show({
         title: 'MONAI Label',
         message: 'Failed to Run Class Based Inference',
         type: 'error',
         duration: 6000,
       });
-      console.log(response.data);
-      return;
+    } finally {
+      this.props.setBusy(false);
     }
-
-    this.notification.show({
-      title: 'MONAI Label',
-      message: 'Run Class Based Inference - Successful',
-      type: 'success',
-      duration: 4000,
-    });
-
-    this.props.updateView(response, model, label_names, true);
   };
 
   segColorToRgb(s) {
