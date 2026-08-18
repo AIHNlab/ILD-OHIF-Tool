@@ -1,0 +1,13 @@
+diff --git a/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js b/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
+index 3a33503..56b271d 100644
+--- a/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
++++ b/node_modules/@cornerstonejs/tools/dist/esm/tools/base/AnnotationTool.js
+@@ -63,7 +63,7 @@ class AnnotationTool extends AnnotationDisplayTool {
+                 const activateHandleIndex = data.handles
+                     ? data.handles.activeHandleIndex
+                     : undefined;
+-                const near = this._imagePointNearToolOrHandle(element, annotation, canvasCoords, 6);
++                const near = this._imagePointNearToolOrHandle(element, annotation, canvasCoords, 10);
+                 const nearToolAndNotMarkedActive = near && !annotation.highlighted;
+                 const notNearToolAndMarkedActive = !near && annotation.highlighted;
+                 if (nearToolAndNotMarkedActive || notNearToolAndMarkedActive) {
