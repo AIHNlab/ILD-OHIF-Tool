@@ -347,7 +347,12 @@ function _mapDisplaySets(displaySets, thumbnailImageSrcMap) {
   const thumbnailNoImageDisplaySets = [];
 
   displaySets
-    .filter(ds => !ds.excludeFromThumbnailBrowser)
+    // SEG series in this app only ever come from MONAI Label's own save
+    // feature, which now manages its saves entirely through its own
+    // Save/Load Segmentation modals rather than the study browser - so hide
+    // them here rather than showing an ever-growing, redundant thumbnail
+    // list of past saves.
+    .filter(ds => !ds.excludeFromThumbnailBrowser && ds.Modality !== 'SEG')
     .forEach(ds => {
       const imageSrc = thumbnailImageSrcMap[ds.displaySetInstanceUID];
       const componentType = _getComponentType(ds);
@@ -355,8 +360,10 @@ function _mapDisplaySets(displaySets, thumbnailImageSrcMap) {
       const array =
         componentType === 'thumbnail' ? thumbnailDisplaySets : thumbnailNoImageDisplaySets;
 
-      array.push({
-        displaySetInstanceUID: ds.displaySetInstanceUID,
+      const { displaySetInstanceUID } = ds;
+
+      const thumbnailProps = {
+        displaySetInstanceUID,
         description: ds.SeriesDescription || '',
         seriesNumber: ds.SeriesNumber,
         modality: ds.Modality,
@@ -370,11 +377,13 @@ function _mapDisplaySets(displaySets, thumbnailImageSrcMap) {
         imageSrc,
         dragData: {
           type: 'displayset',
-          displaySetInstanceUID: ds.displaySetInstanceUID,
+          displaySetInstanceUID,
           // .. Any other data to pass
         },
         isHydratedForDerivedDisplaySet: ds.isHydrated,
-      });
+      };
+
+      array.push(thumbnailProps);
     });
 
   return [...thumbnailDisplaySets, ...thumbnailNoImageDisplaySets];

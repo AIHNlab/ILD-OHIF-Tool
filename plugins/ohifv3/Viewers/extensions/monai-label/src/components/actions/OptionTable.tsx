@@ -41,6 +41,11 @@ export default class OptionTable extends Component {
         const e = document.getElementById(
           this.props.section + this.props.name + k
         );
+        if (!e) {
+          // Row for this key isn't rendered (e.g. section/name changed
+          // faster than this update_map did) - nothing to sync yet.
+          return;
+        }
         if (e.type === 'checkbox') {
           e.checked = v;
         } else {

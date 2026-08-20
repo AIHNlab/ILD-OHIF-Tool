@@ -47,6 +47,22 @@ export function renderAllViewports() {
   cornerstoneTools.utilities.triggerAnnotationRenderForViewportIds(viewportIds);
 }
 
+// SEGMENTATION_ID ('1') is only the segmentation's LOGICAL id - the actual
+// labelmap volume lives in cornerstone3D's volume cache under a separate,
+// internally-generated volumeId, reachable via the registered segmentation's
+// own representationData (this is exactly what OHIF's own
+// SegmentationService.getLabelmapVolume does - reproduced here directly
+// since this module has no access to servicesManager). cache.getVolume
+// (SEGMENTATION_ID) - i.e. looking up a volume literally named '1' - does
+// NOT resolve to it, and silently returns undefined.
+function getSegmentationVolume() {
+  const segmentation = cornerstoneTools.segmentation.state.getSegmentation(SEGMENTATION_ID);
+  const volumeId =
+    segmentation?.representationData?.[cornerstoneTools.Enums.SegmentationRepresentations.Labelmap]
+      ?.volumeId;
+  return volumeId ? cache.getVolume(volumeId) : null;
+}
+
 /**
  * Tracks completed/removed annotations for the ROI prompt tools (point/
  * rectangle/freehand) AND direct edits to the segmentation's voxel data
@@ -76,6 +92,12 @@ class AnnotationHistory {
   // within one stroke keep the ORIGINAL pre-stroke value as "old".
   private pendingChanges: Map<number, { oldValue: number; newValue: number }> | null = null;
   private coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Slice indices touched since the last flush, recorded cheaply by
+  // onSegmentationModified while a stroke is still in progress - the actual
+  // per-pixel diff against lastScalarData (see flushDirtySlices) is deferred
+  // until the stroke settles, rather than re-run on every one of the many
+  // events a single drag fires while the mouse is still moving.
+  private dirtySlices: Set<number> = new Set();
 
   constructor() {
     eventTarget.addEventListener(
@@ -133,7 +155,7 @@ class AnnotationHistory {
       return;
     }
 
-    const volume = cache.getVolume(SEGMENTATION_ID);
+    const volume = getSegmentationVolume();
     const scalarData = volume?.voxelManager?.getCompleteScalarDataArray();
     if (!scalarData) {
       return;
@@ -146,21 +168,55 @@ class AnnotationHistory {
       return;
     }
 
-    if (!this.pendingChanges) {
-      this.pendingChanges = new Map();
-    }
-
-    // Brush events report exactly which slice(s) they touched - scanning
-    // just those instead of the whole volume keeps a live drag smooth.
+    // Brush events report exactly which slice(s) they touched - just record
+    // that (a Set add is effectively free) rather than diffing them here.
     // Inference-run merges (updateView) don't report this, so fall back to
-    // a full scan - acceptable since that only happens once per Run, not
-    // continuously like a drag does.
+    // every slice - still deferred the same way, since that only happens
+    // once per Run rather than repeatedly like a drag.
     const [width, height, depth] = volume.dimensions || [];
     const sliceLength = width * height;
     const slices =
       modifiedSlicesToUse && modifiedSlicesToUse.length
         ? modifiedSlicesToUse
         : Array.from({ length: depth || scalarData.length / sliceLength }, (_, i) => i);
+    slices.forEach((sliceIndex) => this.dirtySlices.add(sliceIndex));
+
+    // Re-armed on every event, so this only actually fires once the stream
+    // of modification events stops - i.e. once the drag/stroke has
+    // completed (mouse release) rather than mid-drag. This is what pushes
+    // the expensive per-pixel diff (flushDirtySlices, below) off the live
+    // dragging path entirely.
+    if (this.coalesceTimer) {
+      clearTimeout(this.coalesceTimer);
+    }
+    this.coalesceTimer = setTimeout(this.flushDirtySlices, VOXEL_COALESCE_MS);
+  };
+
+  // Runs the per-pixel diff against lastScalarData for every slice touched
+  // since the last flush, in one pass - only called once a stroke has
+  // settled (see onSegmentationModified's coalesceTimer) or when something
+  // needs the history brought fully up to date first (undo/redo/clearAll,
+  // via flushPendingChanges), never on every intermediate drag tick.
+  private flushDirtySlices = () => {
+    this.coalesceTimer = null;
+    const slices = this.dirtySlices;
+    this.dirtySlices = new Set();
+    if (!slices.size) {
+      return;
+    }
+
+    const volume = getSegmentationVolume();
+    const scalarData = volume?.voxelManager?.getCompleteScalarDataArray();
+    if (!scalarData || !this.lastScalarData || this.lastScalarData.length !== scalarData.length) {
+      return;
+    }
+
+    const [width, height] = volume.dimensions || [];
+    const sliceLength = width * height;
+
+    if (!this.pendingChanges) {
+      this.pendingChanges = new Map();
+    }
 
     for (const sliceIndex of slices) {
       const begin = sliceIndex * sliceLength;
@@ -175,14 +231,11 @@ class AnnotationHistory {
           oldValue: existing ? existing.oldValue : this.lastScalarData[i],
           newValue,
         });
+        this.lastScalarData[i] = newValue;
       }
     }
-    this.lastScalarData.set(scalarData);
 
-    if (this.coalesceTimer) {
-      clearTimeout(this.coalesceTimer);
-    }
-    this.coalesceTimer = setTimeout(this.commitPendingChanges, VOXEL_COALESCE_MS);
+    this.commitPendingChanges();
   };
 
   private commitPendingChanges = () => {
@@ -206,19 +259,21 @@ class AnnotationHistory {
     this.redoStack = [];
   };
 
-  // A stroke still "in flight" (mid-coalesce) needs to finalize into its
-  // own entry before undo/redo starts touching the stack, so it isn't lost
-  // or wrongly bundled with whatever gets undone/redone next.
+  // A stroke still "in flight" (mid-coalesce, or diffed-but-not-yet-flushed
+  // dirty slices) needs to finalize into its own entry before undo/redo
+  // starts touching the stack, so it isn't lost or wrongly bundled with
+  // whatever gets undone/redone next. flushDirtySlices already ends by
+  // calling commitPendingChanges itself, so nothing further is needed here.
   private flushPendingChanges() {
     if (this.coalesceTimer) {
       clearTimeout(this.coalesceTimer);
       this.coalesceTimer = null;
     }
-    this.commitPendingChanges();
+    this.flushDirtySlices();
   }
 
   private applyVoxels = (entry: VoxelsEntry, direction: 'undo' | 'redo') => {
-    const volume = cache.getVolume(SEGMENTATION_ID);
+    const volume = getSegmentationVolume();
     const voxelManager = volume?.voxelManager;
     const scalarData = voxelManager?.getCompleteScalarDataArray();
     if (!scalarData) {
@@ -278,6 +333,28 @@ class AnnotationHistory {
     }
     this.apply(entry, 'redo');
     this.undoStack.push(entry);
+  };
+
+  // Establishes the CURRENT volume state as a fresh undo baseline, with no
+  // undo entry for the jump from whatever was there a moment ago. Meant for
+  // a wholesale state install that isn't itself a user edit - e.g. loading
+  // a previously-saved segmentation on startup, right after the blank
+  // segmentation's own creation already fired one SEGMENTATION_DATA_MODIFIED
+  // event (which set lastScalarData to that all-zero state). Without this,
+  // the very next real SEGMENTATION_DATA_MODIFIED (the load itself) would
+  // diff blank-vs-loaded and record it as one giant undo entry, so hitting
+  // Undo once right after opening the app would wipe the loaded
+  // segmentation back to blank - "further back" than the loaded state ever
+  // should be. flushPendingChanges() first, so a diff already in flight
+  // from that earlier event doesn't land in undoStack a moment after this
+  // clears it.
+  resetBaseline = () => {
+    this.flushPendingChanges();
+    const volume = getSegmentationVolume();
+    const scalarData = volume?.voxelManager?.getCompleteScalarDataArray();
+    this.lastScalarData = scalarData ? new Uint8Array(scalarData) : null;
+    this.undoStack = [];
+    this.redoStack = [];
   };
 
   clearAll = () => {

@@ -98,6 +98,20 @@ limitations under the License.
   max-height: 100vh;
   padding: 1em;
 }
+.monaiLabelPanel .headerIconLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+.monaiLabelPanel .headerIconLink:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
 .monaiLabelPanel .separator {
   border: 0.01em solid #44626f;
   width: 100%;

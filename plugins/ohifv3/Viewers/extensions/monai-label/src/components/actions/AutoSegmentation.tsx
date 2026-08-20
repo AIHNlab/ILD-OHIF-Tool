@@ -11,74 +11,61 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React from 'react';
+import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { cache } from '@cornerstonejs/core';
 import ModelSelector from '../ModelSelector';
-import BaseTab from './BaseTab';
+import { useActionTab, ActionTabProps } from './useActionTab';
 import { hideNotification, getLabelColor, describeError } from '../../utils/GenericUtils';
 
-export default class AutoSegmentation extends BaseTab {
-  modelSelector: any;
+function getModels(info) {
+  return Object.keys(info.data.models).filter(
+    (m) =>
+      info.data.models[m].type === 'segmentation' ||
+      info.data.models[m].type === 'vista3d'
+  );
+}
 
-  constructor(props) {
-    super(props);
+function getModelLabels(info, model) {
+  const names = (model && info.modelLabelNames[model]) || [];
+  return names.filter((name) => name !== 'background');
+}
 
-    this.modelSelector = React.createRef();
-    this.state = {
-      currentModel: null,
-    };
-  }
+// Unlike segmentInfo() (the live registry, empty until a class has actually
+// been segmented at least once), getLabelColor is a pure function of the
+// label name - the same one MonaiLabelPanel uses to assign each class's
+// color in the first place, so this shows the real eventual color for every
+// class immediately, with nothing needing to have run yet.
+function segColorToRgb(label) {
+  const { r, g, b } = getLabelColor(label);
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
-  onSelectModel = (model) => {
-    console.log('Selecting  Auto Segmentation Model...');
-    console.log(model);
-    this.setState({ currentModel: model });
+const AutoSegmentation = forwardRef<any, ActionTabProps>((props, ref) => {
+  const { info, isBusy, setBusy, updateView, onOptionsConfig, getActiveViewportInfo, onModelUsed } = props;
+  const { notification, tabId, resolveModel, onSelectActionTab } = useActionTab(props);
+
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
+
+  // MonaiLabelPanel calls these two unconditionally on every action tab's
+  // ref when the active tab switches - AutoSegmentation has nothing to do on
+  // either transition, but still needs to expose the methods so that call
+  // doesn't throw.
+  useImperativeHandle(ref, () => ({
+    onEnterActionTab: () => {},
+    onLeaveActionTab: () => {},
+  }));
+
+  const onSelectModel = (model: string) => {
+    setCurrentModel(model);
   };
 
-  getModels() {
-    const { info } = this.props;
-    const models = Object.keys(info.data.models).filter(
-      (m) =>
-        info.data.models[m].type === 'segmentation' ||
-        info.data.models[m].type === 'vista3d'
-    );
-    return models;
-  }
+  const onSegmentation = async () => {
+    const { displaySet } = getActiveViewportInfo();
 
-  getModelLabels(model) {
-    const { info } = this.props;
-    const names = (model && info.modelLabelNames[model]) || [];
-    return names.filter((name) => name !== 'background');
-  }
-
-  // Unlike segmentInfo() (the live registry, empty until a class has
-  // actually been segmented at least once), getLabelColor is a pure
-  // function of the label name - the same one MonaiLabelPanel uses to
-  // assign each class's color in the first place, so this shows the real
-  // eventual color for every class immediately, with nothing needing to
-  // have run yet.
-  segColorToRgb(label) {
-    const { r, g, b } = getLabelColor(label);
-    return `rgb(${r}, ${g}, ${b})`;
-  }
-
-  onSegmentation = async () => {
-    const { currentModel, currentLabel, clickPoints } = this.state;
-    const { info } = this.props;
-    const { displaySet } = this.props.getActiveViewportInfo();
-
-    const models = this.getModels();
-    let selectedModel = 0;
-    for (const model of models) {
-      if (!currentModel || model === currentModel) {
-        break;
-      }
-      selectedModel++;
-    }
-
-    const model = models.length > 0 ? models[selectedModel] : null;
+    const models = getModels(info);
+    const model = resolveModel(models, currentModel);
     if (!model) {
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label',
         message: 'Something went wrong: Model is not selected',
         type: 'error',
@@ -90,7 +77,7 @@ export default class AutoSegmentation extends BaseTab {
     const volumeId = `${displaySet.volumeLoaderSchema}:${displaySet.displaySetInstanceUID}`;
     const volume = cache.getVolume(volumeId);
     if (!volume || !volume.loadStatus?.loaded) {
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label',
         message: 'Please wait for the image to finish loading before running segmentation',
         type: 'warning',
@@ -99,14 +86,14 @@ export default class AutoSegmentation extends BaseTab {
       return;
     }
 
-    const nid = this.notification.show({
+    const nid = notification.show({
       title: 'MONAI Label - ' + model,
       message: 'Running Auto-Segmentation...',
       type: 'info',
       autoClose: false,
     });
 
-    const config = this.props.onOptionsConfig();
+    const config = onOptionsConfig();
     const params =
       config && config.infer && config.infer[model] ? config.infer[model] : {};
     const label_names = info.modelLabelNames[model];
@@ -129,22 +116,19 @@ export default class AutoSegmentation extends BaseTab {
       params['label_prompt'] = filteredLabelClasses;
     }
 
-    this.props.setBusy(true);
+    setBusy(true);
     // Wrapped so a thrown exception (e.g. updateView failing to parse a
     // malformed/error response body) can't skip setBusy(false) - without
-    // this, the Run button (disabled while setBusy is true - see
-    // ModelSelector's buttonDisabled) and busy spinner would stay stuck
-    // forever even though the backend request itself already finished.
+    // this, the Run button (disabled while setBusy is true) and busy
+    // spinner would stay stuck forever even though the backend request
+    // itself already finished.
     try {
-      const response = await this.props
-        .client()
-        .infer(model, displaySet.SeriesInstanceUID, params);
-      // console.log(response);
+      const response = await props.client().infer(model, displaySet.SeriesInstanceUID, params);
 
-      hideNotification(nid, this.notification);
+      hideNotification(nid, notification);
       if (response.status !== 200) {
         console.error('Auto-Segmentation inference failed', response);
-        this.notification.show({
+        notification.show({
           title: 'MONAI Label - ' + model,
           message: `Segmentation failed: ${describeError(response)}`,
           type: 'error',
@@ -153,103 +137,99 @@ export default class AutoSegmentation extends BaseTab {
         return;
       }
 
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label - ' + model,
         message: 'Running Segmentation - Successful',
         type: 'success',
         duration: 4000,
       });
 
-      this.props.updateView(response, model, label_names);
+      updateView(response, model, label_names);
+      onModelUsed?.(model);
     } catch (e) {
       console.error('Auto-Segmentation inference failed', e);
-      hideNotification(nid, this.notification);
-      this.notification.show({
+      hideNotification(nid, notification);
+      notification.show({
         title: 'MONAI Label - ' + model,
         message: `Segmentation failed: ${describeError(e)}`,
         type: 'error',
         duration: 8000,
       });
     } finally {
-      this.props.setBusy(false);
+      setBusy(false);
     }
   };
 
-  render() {
-    const models = this.getModels();
-    // ModelSelector defaults to the first model until the user changes it
-    // without telling this component - mirror that default here too, same
-    // as SemiSegmentation.tsx does, so the class list matches what Run
-    // will actually use.
-    const model = this.state.currentModel || models[0] || null;
-    const labels = this.getModelLabels(model);
+  const models = getModels(info);
+  // ModelSelector defaults to the first model until the user changes it
+  // without telling this component - mirror that default here too, so the
+  // class list matches what Run will actually use.
+  const model = resolveModel(models, currentModel);
+  const labels = getModelLabels(info, model);
 
-    return (
-      <div className="tab">
-        <input
-          type="radio"
-          name="rd"
-          id={this.tabId}
-          className="tab-switch"
-          defaultValue="segmentation"
-          onClick={this.onSelectActionTab}
-          defaultChecked
-        />
-        <label htmlFor={this.tabId} className="tab-label">
-          <span className="tabLabelText">
-            Auto-Segmentation
-            {this.props.isBusy && (
-              <span className="tabBusyIndicator" title="Running…" />
-            )}
-          </span>
-        </label>
-        <div className="tab-content">
-          <ModelSelector
-            ref={this.modelSelector}
-            name="segmentation"
-            title="Segmentation"
-            models={models}
-            currentModel={this.state.currentModel}
-            onClick={this.onSegmentation}
-            onSelectModel={this.onSelectModel}
-            usage={
-              <div style={{ fontSize: 'smaller' }}>
-                <br />
-                <p>
-                  Experience fully automated segmentation for <b>everything</b>{' '}
-                  from the pre-trained model.
-                </p>
-              </div>
-            }
-          />
-          {labels.length > 0 && (
-            <div className="optionsTableContainer">
-              <hr />
-              <p>Classes:</p>
-              <hr />
-              <div className="bodyTableContainer">
-                <table className="optionsTable">
-                  <tbody>
-                    {labels.map((label) => (
-                      <tr key={label}>
-                        <td>
-                          <span
-                            className="segColor"
-                            style={{
-                              backgroundColor: this.segColorToRgb(label),
-                            }}
-                          />
-                        </td>
-                        <td>{label}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+  return (
+    <div className="tab">
+      <input
+        type="radio"
+        name="rd"
+        id={tabId}
+        className="tab-switch"
+        defaultValue="segmentation"
+        onClick={onSelectActionTab}
+        defaultChecked
+      />
+      <label htmlFor={tabId} className="tab-label">
+        <span className="tabLabelText">
+          Auto-Segmentation
+          {isBusy && <span className="tabBusyIndicator" title="Running…" />}
+        </span>
+      </label>
+      <div className="tab-content">
+        <ModelSelector
+          title="Segmentation"
+          models={models}
+          currentModel={currentModel}
+          onClick={onSegmentation}
+          onSelectModel={onSelectModel}
+          usage={
+            <div style={{ fontSize: 'smaller' }}>
+              <br />
+              <p>
+                Experience fully automated segmentation for <b>everything</b> from
+                the pre-trained model.
+              </p>
             </div>
-          )}
-        </div>
+          }
+        />
+        {labels.length > 0 && (
+          <div className="optionsTableContainer">
+            <hr />
+            <p>Classes:</p>
+            <hr />
+            <div className="bodyTableContainer">
+              <table className="optionsTable">
+                <tbody>
+                  {labels.map((label) => (
+                    <tr key={label}>
+                      <td>
+                        <span
+                          className="segColor"
+                          style={{ backgroundColor: segColorToRgb(label) }}
+                        />
+                      </td>
+                      <td>{label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
-    );
-  }
-}
+    </div>
+  );
+});
+
+AutoSegmentation.displayName = 'AutoSegmentation';
+
+export default AutoSegmentation;

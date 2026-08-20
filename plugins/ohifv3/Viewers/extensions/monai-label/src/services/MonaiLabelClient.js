@@ -23,7 +23,7 @@ export default class MonaiLabelClient {
     return await MonaiLabelClient.api_get(url.toString());
   }
 
-  async infer(model, image, params, label = null, result_extension = '.nrrd', output='image') {
+  async infer(model, image, params, result_extension = '.nrrd', output='image') {
     console.log('Running Infer for: ', { model, image, params, result_extension, output });
 
     let url = new URL('infer/' + encodeURIComponent(model), this.server_url);
@@ -43,36 +43,85 @@ export default class MonaiLabelClient {
     return await MonaiLabelClient.api_post(
       url,
       params,
-      label,
+      null,
       true,
       'arraybuffer'
     );
   }
 
-  async next_sample(stategy = 'random', params = {}) {
+  async next_sample(strategy = 'random', params = {}) {
     const url = new URL(
-      'activelearning/' + encodeURIComponent(stategy),
+      'activelearning/' + encodeURIComponent(strategy),
       this.server_url
     ).toString();
 
     return await MonaiLabelClient.api_post(url, params, null, false, 'json');
   }
 
-  async save_label(image, label, params) {
+  async save_label(image, label, params, tag = 'final') {
     let url = new URL('datastore/label', this.server_url);
     url.searchParams.append('image', image);
+    url.searchParams.append('tag', tag);
     url = url.toString();
 
-    /* debugger; */
-
+    // Filename's extension is what the backend persists the label under
+    // (datastore/local.py's save_label keeps the uploaded filename's
+    // extension) - 'label.nrrd' so it's stored as a real NRRD file the
+    // backend's own training/active-learning pipeline can read, not an
+    // opaque '.bin' blob.
     const data = MonaiLabelClient.constructFormDataFromArray(
       params,
       label,
       'label',
-      'label.bin'
+      'label.nrrd'
     );
 
     return await MonaiLabelClient.api_put_data(url, data, 'json');
+  }
+
+  // The backend's label datastore keys a saved label by the image's own id
+  // (label_id == image_id always - see datastore/local.py's save_label), so
+  // fetching it back means asking for "the label of this image", not a
+  // separately-tracked label id. Returns the raw NRRD bytes (arraybuffer),
+  // same shape as infer()'s response, so it can go through the same
+  // SegmentationReader.parseNrrdData() path. A 404 (nothing saved for this
+  // image/tag yet) comes back as a normal non-200 response, not a thrown
+  // error - callers should treat that as "no saved label", not a failure.
+  async get_label(image, tag = 'final') {
+    let url = new URL('datastore/label', this.server_url);
+    url.searchParams.append('label', image);
+    url.searchParams.append('tag', tag);
+    url = url.toString();
+
+    return await MonaiLabelClient.api_get_data(url, 'arraybuffer');
+  }
+
+  // label_id == image_id (see save_label's comment above), so deleting a
+  // saved segmentation means asking the backend to remove "the label of
+  // this image" for the given tag - which, for a DICOMWeb-backed
+  // datastore, also deletes the actual DICOM SEG series it uploaded to
+  // the PACS (not just a local cache entry).
+  async remove_label(image, tag = 'final') {
+    let url = new URL('datastore/label', this.server_url);
+    url.searchParams.append('id', image);
+    url.searchParams.append('tag', tag);
+    url = url.toString();
+
+    return await MonaiLabelClient.api_delete(url);
+  }
+
+  // Lists every saved label (tag) for this image with its info dict
+  // ({model, classes, ts, ...} - whatever save_label's params contained),
+  // for the "Load Segmentation" picker. Manual saves use a distinct
+  // 'save-<timestamp>' tag per save (see MonaiLabelPanel.onSaveSegmentation)
+  // rather than always overwriting a single 'final' tag, so there can be
+  // many to choose from.
+  async list_labels(image) {
+    let url = new URL('datastore/label/list', this.server_url);
+    url.searchParams.append('image', image);
+    url = url.toString();
+
+    return await MonaiLabelClient.api_get_data(url, 'json');
   }
 
   async is_train_running() {
@@ -132,8 +181,20 @@ export default class MonaiLabelClient {
       })
       .catch(function (error) {
         return error;
+      });
+  }
+
+  static api_get_data(url, responseType = 'json') {
+    console.debug('GET:: ' + url);
+    return axios
+      .get(url, { responseType })
+      .then(function (response) {
+        console.debug(response);
+        return response;
       })
-      .finally(function () {});
+      .catch(function (error) {
+        return error;
+      });
   }
 
   static api_delete(url) {
@@ -146,8 +207,7 @@ export default class MonaiLabelClient {
       })
       .catch(function (error) {
         return error;
-      })
-      .finally(function () {});
+      });
   }
 
   static api_post(
@@ -178,8 +238,7 @@ export default class MonaiLabelClient {
       })
       .catch(function (error) {
         return error;
-      })
-      .finally(function () {});
+      });
   }
 
   static api_put(url, params, files, form = false, responseType = 'json') {

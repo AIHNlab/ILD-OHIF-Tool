@@ -11,16 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ProbeTool, annotation, drawing } from '@cornerstonejs/tools';
-
-const { getAnnotations } = annotation.state;
+import ProbeMONAILabelBaseTool from './ProbeMONAILabelBaseTool';
 
 // Negative/exclude point - placed alongside a box, freehand, or point prompt
 // to carve that spot back out of the resulting segmentation, instead of
 // marking where the finding is. A separate tool (not a modifier on
 // ProbeMONAILabel) so both kinds can coexist and be told apart on screen -
 // red here vs. ProbeMONAILabelTool's default color for "include" points.
-export default class ProbeMONAILabelExcludeTool extends ProbeTool {
+// Rendering itself is shared via ProbeMONAILabelBaseTool.
+export default class ProbeMONAILabelExcludeTool extends ProbeMONAILabelBaseTool {
   static toolName = 'ProbeMONAILabelExclude';
 
   constructor(
@@ -33,65 +32,4 @@ export default class ProbeMONAILabelExcludeTool extends ProbeTool {
   ) {
     super(toolProps, defaultToolProps);
   }
-
-  renderAnnotation = (enabledElement, svgDrawingHelper): boolean => {
-    let renderStatus = false;
-    const { viewport } = enabledElement;
-    const { element } = viewport;
-
-    let annotations = getAnnotations(this.getToolName(), element);
-
-    if (!annotations?.length) {
-      return renderStatus;
-    }
-
-    annotations = this.filterInteractableAnnotationsForElement(
-      element,
-      annotations
-    );
-
-    if (!annotations?.length) {
-      return renderStatus;
-    }
-
-    const styleSpecifier: StyleSpecifier = {
-      toolGroupId: this.toolGroupId,
-      toolName: this.getToolName(),
-      viewportId: enabledElement.viewport.id,
-    };
-
-    for (let i = 0; i < annotations.length; i++) {
-      const annotation = annotations[i] as ProbeAnnotation;
-      const annotationUID = annotation.annotationUID;
-      const data = annotation.data;
-      const point = data.handles.points[0];
-      const canvasCoordinates = viewport.worldToCanvas(point);
-
-      styleSpecifier.annotationUID = annotationUID;
-
-      const color =
-        this.configuration?.customColor ??
-        this.getStyle('color', styleSpecifier, annotation);
-
-      // If rendering engine has been destroyed while rendering
-      if (!viewport.getRenderingEngine()) {
-        console.warn('Rendering Engine has been destroyed');
-        return renderStatus;
-      }
-
-      const handleGroupUID = '0';
-
-      drawing.drawHandles(
-        svgDrawingHelper,
-        annotationUID,
-        handleGroupUID,
-        [canvasCoordinates],
-        { color }
-      );
-
-      renderStatus = true;
-    }
-
-    return renderStatus;
-  };
 }

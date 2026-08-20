@@ -11,55 +11,65 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import React from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
-import BaseTab from './BaseTab';
 import NextSampleForm from './NextSampleForm';
-import { describeError } from '../../utils/GenericUtils';
+import { useActionTab, ActionTabProps } from './useActionTab';
+import { hideNotification, describeError } from '../../utils/GenericUtils';
 
-export default class OptionTable extends BaseTab {
-  constructor(props) {
-    super(props);
-    this.state = {
-      strategy: 'random',
-      training: false,
-      segmentId: 'liver',
-    };
-  }
+const ActiveLearning = forwardRef<any, ActionTabProps>((props, ref) => {
+  const { info, isBusy, setBusy, onOptionsConfig } = props;
+  const { notification, uiModalService, tabId } = useActionTab(props);
 
-  onClickNextSample = async () => {
-    const nid = this.notification.show({
+  const [strategy, setStrategy] = useState('random');
+  const [training, setTraining] = useState(false);
+
+  // MonaiLabelPanel calls these two unconditionally on every action tab's
+  // ref when the active tab switches - Active Learning has nothing to do on
+  // either transition, but still needs to expose the methods so that call
+  // doesn't throw.
+  useImperativeHandle(ref, () => ({
+    onEnterActionTab: () => {},
+    onLeaveActionTab: () => {},
+  }));
+
+  useEffect(() => {
+    props.client().is_train_running().then(setTraining);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onChangeStrategy = (evt: React.ChangeEvent<HTMLSelectElement>) => {
+    setStrategy(evt.target.value);
+  };
+
+  const onClickNextSample = async () => {
+    const nid = notification.show({
       title: 'MONAI Label',
-      message: 'Running Active Learning strategy - ' + this.state.strategy,
+      message: 'Running Active Learning strategy - ' + strategy,
       type: 'info',
       autoClose: false,
     });
 
-    const strategy = this.state.strategy;
-    const config = this.props.onOptionsConfig();
+    const config = onOptionsConfig();
     const params =
       config && config.activelearning && config.activelearning[strategy]
         ? config.activelearning[strategy]
         : {};
-    this.props.setBusy(true);
-    const response = await this.props.client().next_sample(strategy, params);
-    this.props.setBusy(false);
-    if (!nid) {
-      window.snackbar.hideAll();
-    } else {
-      this.notification.hide(nid);
-    }
+    setBusy(true);
+    const response = await props.client().next_sample(strategy, params);
+    setBusy(false);
+    hideNotification(nid, notification);
 
     if (response.status !== 200) {
       console.error('Failed to fetch next sample', response);
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label',
         message: `Failed to fetch next sample: ${describeError(response)}`,
         type: 'error',
         duration: 8000,
       });
     } else {
-      this.uiModelService.show({
+      uiModalService.show({
         content: NextSampleForm,
         contentProps: {
           info: response.data,
@@ -71,178 +81,161 @@ export default class OptionTable extends BaseTab {
     }
   };
 
-  onClickUpdateModel = async () => {
-    const training = this.state.training;
-    console.debug('Current training status: ' + training);
-    const config = this.props.onOptionsConfig();
+  const onClickUpdateModel = async () => {
+    const config = onOptionsConfig();
     const params = config && config.train ? config.train : {};
 
     const response = training
-      ? await this.props.client().stop_train()
-      : await this.props.client().run_train(params);
+      ? await props.client().stop_train()
+      : await props.client().run_train(params);
 
     if (response.status !== 200) {
       console.error('Failed to ' + (training ? 'stop' : 'run') + ' training', response);
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label',
         message: `Failed to ${training ? 'STOP' : 'RUN'} training: ${describeError(response)}`,
         type: 'error',
         duration: 8000,
       });
     } else {
-      this.notification.show({
+      notification.show({
         title: 'MONAI Label',
         message: 'Model update task ' + (training ? 'STOPPED' : 'STARTED'),
         type: 'success',
         duration: 2000,
       });
-      this.setState({ training: !training });
+      setTraining(!training);
     }
   };
 
-  async componentDidMount() {
-    const training = await this.props.client().is_train_running();
-    this.setState({ training: training });
-  }
+  const ds = info.data.datastore;
+  const completed = ds && ds.completed ? ds.completed : 0;
+  const total = ds && ds.total ? ds.total : 1;
+  const annotatedPct = Math.round(100 * (completed / total)) + '%';
+  const annotatedTip = completed + '/' + total + ' samples annotated';
 
-  render() {
-    const ds = this.props.info.data.datastore;
-    const completed = ds && ds.completed ? ds.completed : 0;
-    const total = ds && ds.total ? ds.total : 1;
-    const activelearning = Math.round(100 * (completed / total)) + '%';
-    const activelearningTip = completed + '/' + total + ' samples annotated';
+  const ts = info.data.train_stats ? Object.values(info.data.train_stats)[0] : null;
 
-    const ts = this.props.info.data.train_stats
-      ? Object.values(this.props.info.data.train_stats)[0]
-      : null;
+  const epochs = ts ? (ts.total_time ? 0 : ts.epoch ? ts.epoch : 1) : 0;
+  const totalEpochs = ts && ts.total_epochs ? ts.total_epochs : 1;
+  const trainingPct = Math.round(100 * (epochs / totalEpochs)) + '%';
+  const trainingTip = epochs ? epochs + '/' + totalEpochs + ' epochs completed' : 'Not Running';
 
-    const epochs = ts ? (ts.total_time ? 0 : ts.epoch ? ts.epoch : 1) : 0;
-    const total_epochs = ts && ts.total_epochs ? ts.total_epochs : 1;
-    const training = Math.round(100 * (epochs / total_epochs)) + '%';
-    const trainingTip = epochs
-      ? epochs + '/' + total_epochs + ' epochs completed'
-      : 'Not Running';
+  const accuracy = ts && ts.best_metric ? Math.round(100 * ts.best_metric) + '%' : '0%';
+  const accuracyTip = ts && ts.best_metric ? accuracy + ' is current best metric' : 'not determined';
 
-    const accuracy =
-      ts && ts.best_metric ? Math.round(100 * ts.best_metric) + '%' : '0%';
-    const accuracyTip =
-      ts && ts.best_metric
-        ? accuracy + ' is current best metric'
-        : 'not determined';
+  const strategies = info.data.strategies ? info.data.strategies : {};
 
-    const strategies = this.props.info.data.strategies
-      ? this.props.info.data.strategies
-      : {};
+  return (
+    <div className="tab">
+      <input
+        className="tab-switch"
+        type="checkbox"
+        id={tabId}
+        name="activelearning"
+        defaultValue="activelearning"
+      />
+      <label className="tab-label" htmlFor={tabId}>
+        <span className="tabLabelText">
+          Active Learning
+          {isBusy && <span className="tabBusyIndicator" title="Running…" />}
+        </span>
+      </label>
+      <div className="tab-content">
+        <table style={{ fontSize: 'smaller', width: '100%' }}>
+          <tbody>
+            <tr>
+              <td>
+                <button
+                  className="actionInput"
+                  style={{ backgroundColor: 'lightgray' }}
+                  onClick={onClickNextSample}
+                >
+                  Next Sample
+                </button>
+              </td>
+              <td>&nbsp;</td>
+              <td>
+                <button
+                  className="actionInput"
+                  style={{ backgroundColor: 'lightgray' }}
+                  onClick={onClickUpdateModel}
+                >
+                  {training ? 'Stop Training' : 'Update Model'}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <br />
 
-    return (
-      <div className="tab">
-        <input
-          className="tab-switch"
-          type="checkbox"
-          id={this.tabId}
-          name="activelearning"
-          defaultValue="activelearning"
-        />
-        <label className="tab-label" htmlFor={this.tabId}>
-          <span className="tabLabelText">
-            Active Learning
-            {this.props.isBusy && (
-              <span className="tabBusyIndicator" title="Running…" />
-            )}
-          </span>
-        </label>
-        <div className="tab-content">
-          <table style={{ fontSize: 'smaller', width: '100%' }}>
-            <tbody>
-              <tr>
-                <td>
-                  <button
-                    className="actionInput"
-                    style={{ backgroundColor: 'lightgray' }}
-                    onClick={this.onClickNextSample}
+        <table className="optionsTable">
+          <tbody>
+            <tr>
+              <td>Strategy:</td>
+              <td width="80%">
+                <select
+                  className="actionInput"
+                  onChange={onChangeStrategy}
+                  value={strategy}
+                >
+                  {Object.keys(strategies).map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              </td>
+            </tr>
+            <tr>
+              <td colSpan={2}>&nbsp;</td>
+            </tr>
+            <tr>
+              <td>Annotated:</td>
+              <td width="80%" title={annotatedTip}>
+                <div className="w3-round w3-light-grey w3-tiny">
+                  <div
+                    className="w3-round w3-container w3-blue w3-center"
+                    style={{ backgroundColor: 'white' }}
                   >
-                    Next Sample
-                  </button>
-                </td>
-                <td>&nbsp;</td>
-                <td>
-                  <button
-                    className="actionInput"
-                    style={{ backgroundColor: 'lightgray' }}
-                    onClick={this.onClickUpdateModel}
+                    {annotatedPct}
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>Training:</td>
+              <td title={trainingTip}>
+                <div className="w3-round w3-light-grey w3-tiny">
+                  <div
+                    className="w3-round w3-container w3-orange w3-center"
+                    style={{ backgroundColor: 'white' }}
                   >
-                    {this.state.training ? 'Stop Training' : 'Update Model'}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <br />
-
-          <table className="optionsTable">
-            <tbody>
-              <tr>
-                <td>Strategy:</td>
-                <td width="80%">
-                  <select
-                    className="actionInput"
-                    onChange={this.onChangeStrategy}
-                    defaultValue={this.state.strategy}
+                    {trainingPct}
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>Train Acc:</td>
+              <td title={accuracyTip}>
+                <div className="w3-round w3-light-grey w3-tiny">
+                  <div
+                    className="w3-round w3-container w3-green w3-center"
+                    style={{ backgroundColor: 'white' }}
                   >
-                    {Object.keys(strategies).map((a) => (
-                      <option key={a} name={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-              <tr>
-                <td colSpan="2">&nbsp;</td>
-              </tr>
-              <tr>
-                <td>Annotated:</td>
-                <td width="80%" title={activelearningTip}>
-                  <div className="w3-round w3-light-grey w3-tiny">
-                    <div
-                      className="w3-round w3-container w3-blue w3-center"
-                      style={{ backgroundColor: 'white' }}
-                    >
-                      {activelearning}
-                    </div>
+                    {accuracy}
                   </div>
-                </td>
-              </tr>
-              <tr>
-                <td>Training:</td>
-                <td title={trainingTip}>
-                  <div className="w3-round w3-light-grey w3-tiny">
-                    <div
-                      className="w3-round w3-container w3-orange w3-center"
-                      style={{ backgroundColor: 'white' }}
-                    >
-                      {training}
-                    </div>
-                  </div>
-                </td>
-              </tr>
-              <tr>
-                <td>Train Acc:</td>
-                <td title={accuracyTip}>
-                  <div className="w3-round w3-light-grey w3-tiny">
-                    <div
-                      className="w3-round w3-container w3-green w3-center"
-                      style={{ backgroundColor: 'white' }}
-                    >
-                      {accuracy}
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    );
-  }
-}
+    </div>
+  );
+});
+
+ActiveLearning.displayName = 'ActiveLearning';
+
+export default ActiveLearning;
